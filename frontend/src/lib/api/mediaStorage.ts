@@ -5,9 +5,19 @@ import { supabase } from "./supabase";
 const BUCKET = "uploads-private";
 const SIGNED_URL_SECONDS = 60 * 60;
 
+/** 推測できないファイル名（UUID v4）。crypto.randomUUID は https でしか使えないので、無ければ乱数から作る */
+function newFileId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const hex = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** 変換済みの JPEG を保存し、保存先のパスを返す */
 export async function uploadDraftImage(tenant: Tenant, jpeg: Blob): Promise<string> {
-  const path = tenant.uploadPathFor(crypto.randomUUID());
+  const path = tenant.uploadPathFor(newFileId());
   const { error } = await supabase().storage.from(BUCKET).upload(path, jpeg, { contentType: "image/jpeg" });
   if (error) throw new Error(`画像を保存できませんでした: ${error.message}`);
   return path;

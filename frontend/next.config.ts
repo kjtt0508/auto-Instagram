@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   reactCompiler: true,
+  // npm run demo で、同じ Wi-Fi のスマホから開発サーバーを開けるようにする（開発時だけ効く）
+  allowedDevOrigins: process.env.DEMO_LAN_HOST ? [process.env.DEMO_LAN_HOST] : [],
+  // 開発用の表示（N）が画面下の操作バーに重ならないように
+  devIndicators: { position: "top-right" },
 };
 
 export default nextConfig;

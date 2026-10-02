@@ -25,6 +25,7 @@ function respond(route: Route, world: MockWorld, rpcCalls: string[]) {
   const path = url.pathname.replace("/rest/v1/", "");
   if (path.startsWith("rpc/")) {
     rpcCalls.push(path.slice(4));
+    if (path === "rpc/save_post_revision") return json(route, [{ post_id: "new-post", revision_id: "new-post-r1" }]);
     return json(route, path === "rpc/instagram_connection_status" ? [connection()] : null);
   }
   const rows = tableRows(path, url, world);

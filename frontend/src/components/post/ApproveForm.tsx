@@ -31,7 +31,7 @@ export function ApproveForm({ post, onDone }: { post: Post; onDone: () => void }
       <label className="flex min-h-11 items-center justify-between gap-3 px-4 py-1.5" htmlFor="scheduled-at">
         <span>公開日時</span>
         <input id="scheduled-at" type="datetime-local" value={localValue} onChange={(e) => setLocalValue(e.target.value)}
-          className="min-h-9 min-w-0 rounded-[8px] bg-fill px-2 text-[15px]" />
+          className="min-h-9 min-w-0 rounded-[8px] bg-fill px-2 text-[16px]" />
       </label>
       <div className="border-t border-separator p-3">
         <Button variant="filled" block onClick={submit}>承認して予約</Button>

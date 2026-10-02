@@ -14,11 +14,13 @@ const TABS = [
 
 /** スマホ幅（375px）を基準にした画面の枠（00_基本設計 5章） */
 export function AppShell({ children }: { children: ReactNode }) {
+  // 投稿の作成・編集中はタブバーを隠し、画面下を保存・承認依頼の操作に使う（HIG のモーダルな作業）
+  const composing = /^\/posts\/(new|edit)\/?$/.test(usePathname());
   return (
     <SessionGate>
       <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">
-        <main className="flex-1 px-4 pb-28 pt-2">{children}</main>
-        <TabBar />
+        <main className={`flex-1 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] ${composing ? "pb-4" : "pb-28"}`}>{children}</main>
+        {!composing && <TabBar />}
       </div>
     </SessionGate>
   );

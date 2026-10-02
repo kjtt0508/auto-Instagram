@@ -1,5 +1,5 @@
 import type { ImageSpec } from "./ImageSpec";
-import type { PostFormat } from "./PostFormat";
+import { PostFormat } from "./PostFormat";
 import { PostMedia } from "./PostMedia";
 
 /** 投稿画像一覧: 順番が1から連番。カルーセルでは全画像が1枚目と同じ縦横比 */
@@ -22,6 +22,16 @@ export class PostMediaList {
 
   items(): readonly PostMedia[] {
     return this.media;
+  }
+
+  /** 枚数に合う投稿種別（1枚なら画像、2枚以上ならカルーセル） */
+  format(): PostFormat {
+    return PostFormat.forMediaCount(this.count());
+  }
+
+  /** あと何枚追加できるか */
+  remainingSlots(): number {
+    return Math.max(0, PostFormat.maxMediaPerPost() - this.count());
   }
 
   /** 2枚目以降をそろえる縦横比（1枚目の比率）。1枚も無ければ null */

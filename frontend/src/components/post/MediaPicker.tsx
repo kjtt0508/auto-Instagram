@@ -2,25 +2,25 @@
 
 import { useState } from "react";
 import { GroupedSection } from "@/components/ui/Grouped";
-import type { PostFormat } from "@/domain/post/PostFormat";
 import { PostMedia } from "@/domain/post/PostMedia";
-import { PostMediaList } from "@/domain/post/PostMediaList";
+import type { PostMediaList } from "@/domain/post/PostMediaList";
 import type { Tenant } from "@/domain/tenant/Tenant";
 import { uploadDraftImage } from "@/lib/api/mediaStorage";
 import { convertForInstagram } from "@/lib/image/imageConversion";
 import { MediaPreview } from "./MediaPreview";
 
-const FOCUS_CHOICES = [{ label: "上・左", focus: 0 }, { label: "中央", focus: 0.5 }, { label: "下・右", focus: 1 }];
+const FOCUS_CHOICES = [{ label: "上", focus: 0 }, { label: "中央", focus: 0.5 }, { label: "下", focus: 1 }];
 
 /**
- * 画像を選び、画像仕様に合わせて変換して保存する（AC-001-04〜06）。
- * 2枚目以降は1枚目の縦横比にそろえる。トリミング位置は選び直せる（元の画像を覚えている間だけ）。
+ * 画像を撮る・選ぶ（スマホからの投稿が主。AC-001-04〜06）。選んだ画像は画像仕様に合わせて変換して保存する。
+ * 投稿種別は枚数で決まる（1枚=画像、2枚以上=カルーセル）。2枚目以降は1枚目の縦横比にそろえる。
+ * トリミング位置は選び直せる（元の画像を覚えている間だけ）。
  */
-export function MediaPicker({ tenant, format, media, onChange }: {
-  tenant: Tenant; format: PostFormat; media: PostMediaList; onChange: (media: PostMediaList) => void;
+export function MediaPicker({ tenant, media, onChange }: {
+  tenant: Tenant; media: PostMediaList; onChange: (media: PostMediaList) => void;
 }) {
   const [sources] = useState(() => new Map<string, Blob>());
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const convertAndUpload = async (file: Blob, aspect: number | undefined, focus: number) => {
@@ -30,70 +30,103 @@ export function MediaPicker({ tenant, format, media, onChange }: {
     return PostMedia.of({ position: 1, storagePath, width: converted.width, height: converted.height, bytes: converted.blob.size });
   };
 
-  const withBusy = async (work: () => Promise<void>) => {
-    setBusy(true);
+  const withBusy = async (message: string, work: () => Promise<void>) => {
+    setBusy(message);
     setError(null);
     try {
       await work();
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
-  const add = (files: File[]) => withBusy(async () => {
-    // 画像1枚の投稿で選び直したら置き換える
-    let list = format.alignsAspectToFirst() ? media : PostMediaList.empty();
-    for (const file of files.slice(0, format.remainingSlots(list.count()))) {
-      const aspect = format.alignsAspectToFirst() ? list.firstAspect() ?? undefined : undefined;
-      list = list.appended(await convertAndUpload(file, aspect, 0.5));
+  const add = (files: File[]) => withBusy("画像を変換しています…", async () => {
+    let list = media;
+    for (const file of files.slice(0, list.remainingSlots())) {
+      list = list.appended(await convertAndUpload(file, list.firstAspect() ?? undefined, 0.5));
       onChange(list);
     }
   });
 
-  const recrop = (position: number, focus: number) => withBusy(async () => {
+  const recrop = (position: number, focus: number) => withBusy("トリミングしています…", async () => {
     const file = sources.get(media.items()[position - 1].storagePath);
     if (!file) return;
     const aspect = position === 1 ? undefined : media.firstAspect() ?? undefined;
     onChange(media.without(position).inserted((await convertAndUpload(file, aspect, focus)).movedTo(position)));
   });
 
+  const footer = error ? <span role="alert" className="text-destructive">{error}</span>
+    : media.count() === 0 ? "Instagram の仕様（縦横比4:5〜1.91:1・幅1440px以下の JPEG）に自動で変換します"
+      : `${media.format().label}の投稿（${media.count()}枚）。2枚以上でカルーセルになります（最大10枚）`;
+
   return (
     <>
       <MediaPreview media={media} />
-      <GroupedSection title={`画像（${format.mediaCountRule()}）`} label="画像"
-        footer={error ? <span role="alert" className="text-destructive">{error}</span> : "Instagram の仕様（JPEG・幅1440px以下・縦横比4:5〜1.91:1）に自動で変換します"}>
+      <GroupedSection title="画像" label="画像" footer={footer}>
         {media.items().map((m) => (
-          <div key={m.storagePath} className="border-b border-separator px-4 py-2">
-            <div className="flex min-h-9 items-center justify-between gap-2">
-              <span>{m.position}枚目</span>
-              <span className="flex gap-1">
-                {m.position > 1 && <SmallButton onClick={() => onChange(media.movedForward(m.position))}>前へ</SmallButton>}
-                <SmallButton destructive onClick={() => onChange(media.without(m.position))}>削除</SmallButton>
-              </span>
-            </div>
-            {sources.has(m.storagePath) && (
-              <div className="flex items-center gap-1 pt-1 text-[13px] text-secondary-label">
-                <span className="mr-1">トリミング</span>
-                {FOCUS_CHOICES.map((c) => <SmallButton key={c.label} disabled={busy} onClick={() => recrop(m.position, c.focus)}>{c.label}</SmallButton>)}
-              </div>
-            )}
-          </div>
+          <MediaRow key={m.storagePath} position={m.position} canRecrop={sources.has(m.storagePath)} busy={busy !== null}
+            onForward={() => onChange(media.movedForward(m.position))} onRemove={() => onChange(media.without(m.position))}
+            onRecrop={(focus) => recrop(m.position, focus)} />
         ))}
-        <label className={`block min-h-11 px-4 py-2.5 text-center text-tint active:bg-fill ${busy ? "opacity-40" : "cursor-pointer"}`}>
-          {busy ? "画像を変換しています…" : "画像を選ぶ"}
-          <input type="file" accept="image/jpeg,image/png,image/heic" multiple={format.alignsAspectToFirst()} disabled={busy}
-            className="sr-only" aria-label="画像を選ぶ" onChange={(e) => add([...(e.target.files ?? [])])} />
-        </label>
+        {busy && <p className="px-4 py-3 text-center text-secondary-label">{busy}</p>}
+        {!busy && media.remainingSlots() > 0 && (
+          <div className="grid grid-cols-2">
+            <PickButton label="写真を撮る" icon={CAMERA} capture onFiles={add} />
+            <PickButton label="写真を選ぶ" icon={PHOTOS} multiple onFiles={add} />
+          </div>
+        )}
       </GroupedSection>
     </>
+  );
+}
+
+function MediaRow({ position, canRecrop, busy, onForward, onRemove, onRecrop }: {
+  position: number; canRecrop: boolean; busy: boolean; onForward: () => void; onRemove: () => void; onRecrop: (focus: number) => void;
+}) {
+  return (
+    <div className="border-b border-separator px-4 py-2">
+      <div className="flex min-h-9 items-center justify-between gap-2">
+        <span>{position}枚目</span>
+        <span className="flex gap-1">
+          {position > 1 && <SmallButton onClick={onForward}>前へ</SmallButton>}
+          <SmallButton destructive onClick={onRemove}>削除</SmallButton>
+        </span>
+      </div>
+      {canRecrop && (
+        <div className="flex items-center gap-1 pt-1 text-[13px] text-secondary-label">
+          <span className="mr-1">切り取る位置</span>
+          {FOCUS_CHOICES.map((c) => <SmallButton key={c.label} disabled={busy} onClick={() => onRecrop(c.focus)}>{c.label}</SmallButton>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CAMERA = "M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z";
+const PHOTOS = "M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M15.5 9.5h.01";
+
+/** 写真を撮る（capture でカメラを直接開く）・写真を選ぶ（写真ライブラリ） */
+function PickButton({ label, icon, capture, multiple, onFiles }: {
+  label: string; icon: string; capture?: boolean; multiple?: boolean; onFiles: (files: File[]) => void;
+}) {
+  return (
+    <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 text-[15px] text-tint active:bg-fill [&+&]:border-l [&+&]:border-separator">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-7 w-7 fill-none stroke-current" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round">
+        <path d={icon} />
+      </svg>
+      {label}
+      <input type="file" accept="image/jpeg,image/png,image/heic,image/heif" aria-label={label} className="sr-only"
+        capture={capture ? "environment" : undefined} multiple={multiple}
+        onChange={(e) => { onFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
+    </label>
   );
 }
 
 function SmallButton({ destructive, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { destructive?: boolean }) {
   return (
     <button type="button" {...props}
-      className={`min-h-8 rounded-full bg-fill px-3 text-[13px] active:opacity-60 disabled:opacity-40 ${destructive ? "text-destructive" : "text-tint"}`} />
+      className={`min-h-9 rounded-full bg-fill px-3 text-[15px] active:opacity-60 disabled:opacity-40 ${destructive ? "text-destructive" : "text-tint"}`} />
   );
 }

@@ -78,6 +78,13 @@ describe("投稿画像一覧の並べ替え", () => {
     ]);
   });
 
+  it("BR-001-04 投稿種別は枚数で決まる（1枚は画像、2〜10枚はカルーセル）。あと何枚足せるかを返す", () => {
+    expect(list.without(2).without(2).format()).toBe(PostFormat.FEED_IMAGE);
+    expect(list.format()).toBe(PostFormat.CAROUSEL);
+    expect(list.remainingSlots()).toBe(7);
+    expect(PostMediaList.empty().format()).toBe(PostFormat.FEED_IMAGE);
+  });
+
   it("連番でなければ作れない", () => {
     expect(() => PostMediaList.of([media(1, 1080, 1350), media(3, 1080, 1350)])).toThrow();
   });

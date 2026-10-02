@@ -14,6 +14,16 @@ export class PostFormat {
     return [PostFormat.FEED_IMAGE, PostFormat.CAROUSEL];
   }
 
+  /** 画像の枚数に合う投稿種別（1枚以下なら画像、2枚以上ならカルーセル）。スマホでは種別を選ばせず枚数で決める */
+  static forMediaCount(count: number): PostFormat {
+    return count >= PostFormat.CAROUSEL.minMedia ? PostFormat.CAROUSEL : PostFormat.FEED_IMAGE;
+  }
+
+  /** 1つの投稿に入れられる最大の枚数 */
+  static maxMediaPerPost(): number {
+    return Math.max(...PostFormat.all().map((f) => f.maxMedia));
+  }
+
   static from(code: string): PostFormat {
     const found = PostFormat.all().find((f) => f.code === code);
     if (!found) throw new Error(`知らない投稿種別です: ${code}`);

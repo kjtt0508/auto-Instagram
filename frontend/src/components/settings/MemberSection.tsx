@@ -41,7 +41,7 @@ function MemberRow({ me, member, act }: { me: Member; member: Member; act: (c: (
         </span>
         {editable ? (
           <select aria-label={`${member.displayName}のロール`} value={member.role.code}
-            onChange={(e) => act(() => changeRole(member, Role.from(e.target.value)))} className="min-h-9 rounded-[8px] bg-fill px-2 text-[15px] text-tint">
+            onChange={(e) => act(() => changeRole(member, Role.from(e.target.value)))} className="min-h-9 rounded-[8px] bg-fill px-2 text-[16px] text-tint">
             {me.role.assignableRoles().map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
           </select>
         ) : <span className="shrink-0 text-secondary-label">{member.isActive() ? member.role.label : "無効"}</span>}
@@ -49,7 +49,7 @@ function MemberRow({ me, member, act }: { me: Member; member: Member; act: (c: (
       {editable && (
         <div className="mt-2 flex items-center gap-2">
           <input aria-label="無効化の理由" placeholder="無効化の理由（卒業など）" value={reason} onChange={(e) => setReason(e.target.value)}
-            className="min-h-9 min-w-0 flex-1 rounded-[8px] bg-fill px-3 text-[15px]" />
+            className="min-h-9 min-w-0 flex-1 rounded-[8px] bg-fill px-3 text-[16px]" />
           <button type="button" disabled={reason.trim() === ""} onClick={() => act(() => deactivate(member, reason.trim()))}
             className="min-h-9 shrink-0 px-2 text-[15px] text-destructive disabled:opacity-40">無効化</button>
         </div>

@@ -26,7 +26,7 @@ export function RetryForm({ postId, onDone }: { postId: string; onDone: () => vo
       <Button variant="filled" block onClick={() => submit(() => ScheduledAt.immediate(new Date()))}>今すぐ再実行</Button>
       <div className="flex items-center gap-2">
         <input type="datetime-local" aria-label="再実行の日時" value={localValue} onChange={(e) => setLocalValue(e.target.value)}
-          className="min-h-11 min-w-0 flex-1 rounded-[8px] bg-fill px-3 text-[15px]" />
+          className="min-h-11 min-w-0 flex-1 rounded-[8px] bg-fill px-3 text-[16px]" />
         <Button variant="tinted" className="shrink-0 text-[15px]"
           onClick={() => submit(() => ScheduledAt.decide(fromJapanLocalInput(localValue), new Date()))}>日時を指定</Button>
       </div>
