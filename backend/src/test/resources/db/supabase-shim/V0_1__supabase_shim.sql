@@ -28,3 +28,24 @@ $$;
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+
+-- Supabase Storage の最小の代役（V7 のバケット・ポリシーが作られ、団体ごとの境界をテストで確かめられるように）
+create schema storage;
+grant usage on schema storage to anon, authenticated, service_role;
+create table storage.buckets (
+  id      text primary key,
+  name    text not null,
+  public  boolean not null default false
+);
+create table storage.objects (
+  id         uuid primary key default gen_random_uuid(),
+  bucket_id  text not null references storage.buckets(id),
+  name       text not null
+);
+alter table storage.objects enable row level security;
+grant select, insert on storage.objects to authenticated;
+grant all on storage.objects, storage.buckets to service_role;
+-- Supabase と同じく、パスのフォルダ部分（最後の要素を除く）を配列で返す
+create function storage.foldername(name text) returns text[] language sql immutable as $$
+  select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)]
+$$;

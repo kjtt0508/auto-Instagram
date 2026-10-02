@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/*
+ * Apple Human Interface Guidelines に沿った色（iOS のシステムカラーと、グループ化した背景・ラベル・区切り線）。
+ * 画面ではこのトークン（bg-grouped, text-label, text-tint …）だけを使い、ダークモードはここで切り替える。
+ */
+@theme {
+  --color-grouped: #f2f2f7;          /* systemGroupedBackground */
+  --color-cell: #ffffff;             /* secondarySystemGroupedBackground */
+  --color-fill: #e9e9eb;             /* tertiarySystemFill（入力欄・セグメントの地） */
+  --color-label: #000000;
+  --color-secondary-label: #3c3c4399;
+  --color-tertiary-label: #3c3c434d;
+  --color-separator: #3c3c4349;
+  --color-tint: #007aff;             /* systemBlue */
+  --color-destructive: #ff3b30;      /* systemRed */
+  --color-success: #34c759;          /* systemGreen */
+  --color-caution: #ffcc00;          /* systemYellow */
+  --color-neutral: #8e8e93;          /* systemGray */
+  --color-on-tint: #ffffff;
+  --color-bar: #f9f9f9cc;            /* タブバー（半透明） */
+  --radius-cell: 10px;
+  --radius-control: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-grouped: #000000;
+    --color-cell: #1c1c1e;
+    --color-fill: #7676803d;
+    --color-label: #ffffff;
+    --color-secondary-label: #ebebf599;
+    --color-tertiary-label: #ebebf54d;
+    --color-separator: #54545899;
+    --color-tint: #0a84ff;
+    --color-destructive: #ff453a;
+    --color-success: #30d158;
+    --color-caution: #ffd60a;
+    --color-neutral: #8e8e93;
+    --color-bar: #1e1e1ecc;
+  }
+}
+
+html {
+  color-scheme: light dark;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  /* San Francisco（Apple 端末）→ ヒラギノ → Noto の順 */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 17px;                   /* HIG の本文（Body）サイズ */
+  line-height: 1.35;
+  background: var(--color-grouped);
+  color: var(--color-label);
+  /* 375px 幅で横スクロールを出さない（NFR-001-02） */
+  overflow-x: hidden;
+}
+
+input, textarea, select, button {
+  font: inherit;
+}

@@ -1,0 +1,9 @@
+{
+  "$comment": "アクセストークンの暗号化の共通テストベクタ（ADR-0005, ADR-0007）。AES-256-GCM、タグ128bit込みの暗号文、AAD は連携IDの文字列（UTF-8）。鍵はテスト専用",
+  "keyBase64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "keyVersion": 1,
+  "connectionId": "3f2a8c1e-5b7d-4e6f-9a01-23456789abcd",
+  "ivBase64": "AAECAwQFBgcICQoL",
+  "plaintext": "IGAA-test-token-value",
+  "ciphertextBase64": "DkWXWuiRp2j5bOPk2owWQPW360GVs/ba3Yb9SHWNVbPI1cD/bg=="
+}

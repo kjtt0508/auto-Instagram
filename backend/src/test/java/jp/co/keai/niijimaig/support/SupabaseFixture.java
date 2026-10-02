@@ -55,6 +55,14 @@ public final class SupabaseFixture {
 		});
 	}
 
+	/** API関数・定期処理と同じ service role で実行する（RLS を通らない） */
+	public <T> T asServiceRole(Function<JdbcTemplate, T> work) {
+		return tx.execute(status -> {
+			jdbc.execute("set local role service_role");
+			return work.apply(jdbc);
+		});
+	}
+
 	public record LoggedIn(UUID memberId, UUID authUserId, String email) {
 		String claims() {
 			return "{\"sub\":\"" + authUserId + "\",\"email\":\"" + email

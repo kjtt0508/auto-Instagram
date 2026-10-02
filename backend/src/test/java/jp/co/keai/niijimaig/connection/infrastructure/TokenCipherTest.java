@@ -4,12 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import jp.co.keai.niijimaig.connection.domain.AccessToken;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 class TokenCipherTest {
 
@@ -28,6 +32,21 @@ class TokenCipherTest {
 		assertThat(sealed.iv()).hasSize(12);
 		assertThat(cipher.open(sealed, connection)).isEqualTo(token);
 		assertThatThrownBy(() -> cipher.open(sealed, UUID.randomUUID())).isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
+	@DisplayName("NFR-001-03 API関数（TS の Web Crypto）が暗号化したトークンを復号できる（fixtures/token-cipher.json）")
+	void opensVectorEncryptedByTypeScript() throws Exception {
+		JsonNode vector = JsonMapper.builder().build().readTree(Path.of("../docs/model/fixtures/token-cipher.json").toFile());
+		TokenCipher shared = new TokenCipher(vector.get("keyBase64").asString(), (short) vector.get("keyVersion").asInt());
+		TokenCipher.Sealed sealed = new TokenCipher.Sealed(
+				Base64.getDecoder().decode(vector.get("ciphertextBase64").asString()),
+				Base64.getDecoder().decode(vector.get("ivBase64").asString()),
+				(short) vector.get("keyVersion").asInt());
+
+		AccessToken opened = shared.open(sealed, UUID.fromString(vector.get("connectionId").asString()));
+
+		assertThat(opened).isEqualTo(new AccessToken(vector.get("plaintext").asString()));
 	}
 
 	@Test

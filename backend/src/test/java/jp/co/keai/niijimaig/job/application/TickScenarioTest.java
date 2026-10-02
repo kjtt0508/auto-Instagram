@@ -214,7 +214,7 @@ class TickScenarioTest {
 				{"format":"FEED_IMAGE","mediaSource":"UPLOAD","caption":"%s","prCategory":"NONE",
 				 "media":[{"position":1,"storagePath":"%s/posts/%s.jpg","width":1080,"height":1350,"byteSize":500000}]}
 				""".formatted(caption, tenant, UUID.randomUUID());
-		UUID post = db.as(editor, j -> j.queryForObject("select public.save_post_revision(null, ?::jsonb)", UUID.class, revision));
+		UUID post = db.as(editor, j -> j.queryForObject("select post_id from public.save_post_revision(null, ?::jsonb)", UUID.class, revision));
 		UUID rev = jdbc.queryForObject("select id from post_revisions where post_id = ?", UUID.class, post);
 		db.as(editor, j -> j.queryForList("select public.request_approval(?, ?)", post, rev));
 		db.as(approver, j -> j.queryForList("select public.approve_post(?, ?, ?)", post, rev, Timestamp.from(scheduledAt)));

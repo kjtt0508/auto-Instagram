@@ -1,0 +1,9 @@
+{
+  "name": "新島info 投稿",
+  "short_name": "新島info",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#1d4ed8",
+  "icons": [{ "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }]
+}

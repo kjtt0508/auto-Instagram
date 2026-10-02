@@ -91,6 +91,21 @@ class AccessControlDatabaseTest {
 	}
 
 	@Test
+	@DisplayName("BR-001-07 承認待ちを下書きに戻せるのは承認者以上。戻すと再び編集できる")
+	void onlyApproverSendsBackToDraft() {
+		UUID post = createDraft(editor);
+		db.as(editor, j -> j.queryForList("select public.request_approval(?, ?)", post, latestRevision(post)));
+
+		assertThatThrownBy(() -> db.as(editor, j -> j.queryForList("select public.send_back_to_draft(?)", post)))
+				.rootCause().hasMessageContaining("権限がありません");
+		db.as(approver, j -> j.queryForList("select public.send_back_to_draft(?)", post));
+		db.as(editor, j -> j.queryForObject("select post_id from public.save_post_revision(?, ?::jsonb)", UUID.class, post, revisionJson("直した")));
+
+		String status = db.as(editor, j -> j.queryForObject("select status from post_current where post_id = ?", String.class, post));
+		assertThat(status).isEqualTo("DRAFT");
+	}
+
+	@Test
 	@DisplayName("AC-001-10 編集者は出来事を直接記録して承認を回避できない")
 	void editorCannotInsertEventsDirectly() {
 		UUID post = createDraft(editor);
@@ -117,6 +132,22 @@ class AccessControlDatabaseTest {
 	}
 
 	@Test
+	@DisplayName("AC-001-24 自分自身のロールは変えられず、最後の管理者は外せない")
+	void adminCannotRemoveLastAdmin() {
+		assertThatThrownBy(() -> db.as(admin, j -> j.queryForList("select public.change_member_role(?, 'EDITOR')", admin.memberId())))
+				.rootCause().hasMessageContaining("自分自身のロールは変えられません");
+		assertThatThrownBy(() -> db.as(admin, j -> j.queryForList("select public.deactivate_member(?, '交代')", admin.memberId())))
+				.rootCause().hasMessageContaining("自分自身は無効化できません");
+		assertThatThrownBy(() -> jdbc.queryForList("select app.require_admin_remains(?, ?)", tenant, admin.memberId()))
+				.rootCause().hasMessageContaining("最後の管理者は外せません");
+
+		LoggedIn second = db.member(tenant, "admin2-" + UUID.randomUUID() + "@example.com", "ADMIN");
+		db.as(admin, j -> j.queryForList("select public.change_member_role(?, 'APPROVER')", second.memberId()));
+		String role = jdbc.queryForObject("select role from member_current where member_id = ?", String.class, second.memberId());
+		assertThat(role).isEqualTo("APPROVER");
+	}
+
+	@Test
 	@DisplayName("NFR-001-05 他団体の投稿は読めず、他団体の投稿は操作できない")
 	void otherTenantIsIsolated() {
 		UUID post = createDraft(editor);
@@ -139,7 +170,7 @@ class AccessControlDatabaseTest {
 		Timestamp tomorrow = Timestamp.from(Instant.now().plus(1, ChronoUnit.DAYS));
 
 		assertThatThrownBy(() -> db.as(editor, j -> j.queryForObject(
-				"select public.save_post_revision(?, ?::jsonb)", UUID.class, post, revisionJson("書き換え"))))
+				"select post_id from public.save_post_revision(?, ?::jsonb)", UUID.class, post, revisionJson("書き換え"))))
 				.rootCause().hasMessageContaining("frozen");
 
 		db.as(approver, j -> j.queryForList("select public.approve_post(?, ?, ?)", post, revision, tomorrow));
@@ -160,7 +191,7 @@ class AccessControlDatabaseTest {
 	}
 
 	private UUID createDraft(LoggedIn author) {
-		return db.as(author, j -> j.queryForObject("select public.save_post_revision(null, ?::jsonb)", UUID.class,
+		return db.as(author, j -> j.queryForObject("select post_id from public.save_post_revision(null, ?::jsonb)", UUID.class,
 				revisionJson("11/3 学園祭のお知らせ #新島info")));
 	}
 

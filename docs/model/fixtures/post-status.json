@@ -1,0 +1,13 @@
+{
+  "$comment": "投稿状態の遷移表（ADR-0005）。domain.yaml の transitions・DB の post_status_transitions と一致させる",
+  "transitions": {
+    "DRAFT": ["AWAITING_APPROVAL", "DISCARDED"],
+    "AWAITING_APPROVAL": ["SCHEDULED", "DRAFT", "DISCARDED"],
+    "SCHEDULED": ["PUBLISHING", "DRAFT", "FAILED"],
+    "PUBLISHING": ["PUBLISHED", "FAILED", "SCHEDULED"],
+    "PUBLISHED": [],
+    "FAILED": ["SCHEDULED", "DRAFT", "DISCARDED"],
+    "DISCARDED": []
+  },
+  "editable": ["DRAFT"]
+}

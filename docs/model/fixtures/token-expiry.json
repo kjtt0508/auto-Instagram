@@ -1,0 +1,10 @@
+{
+  "$comment": "トークン有効期限の共通テストケース（ADR-0005）。remainingHours は現在から期限までの時間。日数は切り捨て",
+  "cases": [
+    { "id": "AC-001-19", "remainingHours": 744, "remainingDays": 31, "needsRefresh": false, "needsWarning": false, "failWorkflowIfRefreshFailed": false },
+    { "id": "AC-001-19", "remainingHours": 720, "remainingDays": 30, "needsRefresh": true, "needsWarning": false, "failWorkflowIfRefreshFailed": false },
+    { "id": "BR-001-11", "remainingHours": 359, "remainingDays": 14, "needsRefresh": true, "needsWarning": true, "failWorkflowIfRefreshFailed": false },
+    { "id": "AC-001-20", "remainingHours": 168, "remainingDays": 7, "needsRefresh": true, "needsWarning": true, "failWorkflowIfRefreshFailed": true },
+    { "id": "BR-001-11", "remainingHours": -1, "remainingDays": 0, "needsRefresh": true, "needsWarning": true, "failWorkflowIfRefreshFailed": true }
+  ]
+}

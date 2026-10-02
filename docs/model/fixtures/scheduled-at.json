@@ -1,0 +1,10 @@
+{
+  "$comment": "予約日時の確定（decide）の共通テストケース（ADR-0005）。offsetMinutes は確定時点の現在からのずれ",
+  "decide": [
+    { "id": "AC-001-11", "name": "過去の日時は拒否", "offsetMinutes": -1, "accepted": false, "violation": "予約日時は現在より後にしてください" },
+    { "id": "AC-001-11", "name": "現在ちょうどは拒否", "offsetMinutes": 0, "accepted": false, "violation": "予約日時は現在より後にしてください" },
+    { "id": "AC-001-11", "name": "現在+1分は受け付ける", "offsetMinutes": 1, "accepted": true },
+    { "id": "AC-001-11", "name": "現在+365日は受け付ける", "offsetMinutes": 525600, "accepted": true },
+    { "id": "AC-001-11", "name": "現在+366日は拒否", "offsetMinutes": 527040, "accepted": false, "violation": "予約日時は1年以内にしてください" }
+  ]
+}

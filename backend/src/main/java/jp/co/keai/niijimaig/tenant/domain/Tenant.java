@@ -4,7 +4,7 @@ import java.util.UUID;
 
 import jp.co.keai.niijimaig.post.domain.PublishGrace;
 
-/** 団体: システムを利用する組織。公開猶予・PR表記などの設定（最新の版）を返す */
+/** 団体: このシステムを使う単位（当面は新島infoだけ）。公開猶予・PR表記などの設定（最新の版）を返す */
 public final class Tenant {
 
 	private final UUID id;

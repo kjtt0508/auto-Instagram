@@ -1,0 +1,25 @@
+{
+  "$comment": "画像仕様と投稿画像一覧の共通テストケース（ADR-0005）。violations は満たさない項目の数",
+  "images": [
+    { "name": "4:5 1080x1350 は仕様どおり", "width": 1080, "height": 1350, "bytes": 900000, "violations": 0 },
+    { "name": "1.91:1 1440x754 は仕様どおり", "width": 1440, "height": 754, "bytes": 900000, "violations": 0 },
+    { "name": "幅1441は仕様外", "width": 1441, "height": 1441, "bytes": 900000, "violations": 1 },
+    { "name": "幅319は仕様外", "width": 319, "height": 319, "bytes": 90000, "violations": 1 },
+    { "name": "8MB 超は仕様外", "width": 1080, "height": 1080, "bytes": 8388609, "violations": 1 },
+    { "name": "9:16 は仕様外", "width": 1080, "height": 1920, "bytes": 900000, "violations": 1 }
+  ],
+  "mediaCounts": [
+    { "id": "AC-001-07", "format": "CAROUSEL", "count": 1, "accepted": false, "violation": "カルーセルは2〜10枚です" },
+    { "id": "AC-001-07", "format": "CAROUSEL", "count": 2, "accepted": true },
+    { "id": "AC-001-07", "format": "CAROUSEL", "count": 10, "accepted": true },
+    { "id": "AC-001-07", "format": "CAROUSEL", "count": 11, "accepted": false, "violation": "カルーセルは2〜10枚です" },
+    { "id": "BR-001-04", "format": "FEED_IMAGE", "count": 1, "accepted": true },
+    { "id": "BR-001-04", "format": "FEED_IMAGE", "count": 2, "accepted": false, "violation": "画像は1枚です" }
+  ],
+  "conversions": [
+    { "id": "AC-001-04", "name": "4:3 の 4032x3024 は幅1440・比率そのまま", "width": 4032, "height": 3024, "outputWidth": 1440, "outputHeight": 1080 },
+    { "id": "AC-001-05", "name": "9:16 は 4:5 に中央トリミング", "width": 1080, "height": 1920, "outputWidth": 1080, "outputHeight": 1350, "cropY": 285 },
+    { "id": "BR-001-03", "name": "横長 3:1 は 1.91:1 に中央トリミング", "width": 3000, "height": 1000, "outputWidth": 1440, "outputHeight": 754 },
+    { "id": "AC-001-06", "name": "カルーセル2枚目の 1:1 は1枚目の 4:5 にそろえる", "width": 1080, "height": 1080, "targetAspect": 0.8, "outputWidth": 864, "outputHeight": 1080 }
+  ]
+}

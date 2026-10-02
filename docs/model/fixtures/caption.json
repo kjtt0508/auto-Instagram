@@ -1,0 +1,15 @@
+{
+  "$comment": "キャプション・PR区分の共通テストケース（ADR-0005）。text は segments を連結して作る（repeat を count 回）。文字数はコードポイントで数える。violation（画面の文言）は TS だけが比べる",
+  "prLabel": "【PR】\n",
+  "cases": [
+    { "id": "AC-001-08", "name": "2,200文字は保存できる", "segments": [{ "repeat": "あ", "count": 2200 }], "prCategory": "NONE", "valid": true, "publishValid": true },
+    { "id": "AC-001-08", "name": "2,201文字はエラー", "segments": [{ "repeat": "あ", "count": 2201 }], "prCategory": "NONE", "valid": false, "violation": "キャプションは2,200文字以内です（2,201文字）" },
+    { "id": "AC-001-08", "name": "ハッシュタグ30個は保存できる", "segments": [{ "repeat": "#タグ ", "count": 30 }], "prCategory": "NONE", "valid": true, "publishValid": true },
+    { "id": "AC-001-08", "name": "ハッシュタグ31個はエラー", "segments": [{ "repeat": "#タグ ", "count": 31 }], "prCategory": "NONE", "valid": false, "violation": "ハッシュタグは30個までです（31個）" },
+    { "id": "BR-001-05", "name": "全角＃もハッシュタグとして数える", "segments": [{ "repeat": "＃タグ ", "count": 31 }], "prCategory": "NONE", "valid": false, "violation": "ハッシュタグは30個までです（31個）" },
+    { "id": "BR-001-05", "name": "絵文字は1文字と数える", "segments": [{ "repeat": "😀", "count": 2200 }], "prCategory": "NONE", "valid": true, "publishValid": true },
+    { "id": "AC-001-09", "name": "PR案件2,196文字はPR表記込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2196 }], "prCategory": "PR", "valid": true, "publishValid": false, "violation": "PR表記を含めて2,200文字以内にしてください（2,201文字）" },
+    { "id": "AC-001-09", "name": "PR案件2,195文字はPR表記込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2195 }], "prCategory": "PR", "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "length": 2200 } },
+    { "id": "BR-001-05", "name": "通常の投稿にはPR表記を付けない", "segments": [{ "repeat": "あ", "count": 10 }], "prCategory": "NONE", "valid": true, "publishValid": true, "publishText": { "prefix": "", "length": 10 } }
+  ]
+}
