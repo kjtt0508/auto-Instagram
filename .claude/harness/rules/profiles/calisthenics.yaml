@@ -1,0 +1,56 @@
+# 『過激なコーディング規則』（10章 / Object Calisthenics 由来）
+# 既存コードの改善練習・設計の学習用。harness.yaml の profiles: [calisthenics] で有効化。
+# 本番運用で常時有効にするより、学習期間やリファクタリング対象のモジュールで使う。
+language: common
+limits:
+  nesting_depth: 1          # 規則1: 1メソッドにつきインデントは1段
+  file_lines: 50            # 規則7: エンティティを小さく（50行）
+  function_lines: 10
+  params_warn: 2
+  getter_warn: 0            # 規則9: getter/setter を使わない
+  instance_vars: 2          # 規則8: インスタンス変数は2つまで
+severity_overrides:
+  common.else: error        # 規則2: else を使わない
+  common.abbreviation: error  # 規則6: 名前を省略しない
+  builtin.nesting: error
+  java.getters: error
+  ts.getters: error
+rules:
+  - id: calisthenics.one-dot
+    principle: P12
+    severity: warn
+    layers: [domain, application]
+    languages: [java, kotlin, typescript, csharp, php]
+    pattern: '\w\s*\([^()]*\)\s*\.\s*\w+\s*\([^()]*\)\s*\.\s*\w+'
+    unless_line: '\b(stream|builder|Builder|map|filter|reduce|then|pipe|Select|Where)\b'
+    message: 規則5「1行につきドットは1つ」。他のオブジェクトの中身をたどらず、直接の相手に命じる
+  - id: calisthenics.instance-vars-java
+    principle: P02
+    severity: error
+    layers: [domain]
+    languages: [java, csharp]
+    member_of: '\b(class|record|struct)\b'
+    pattern: '^\s*(private|protected|internal)\s+(readonly\s+|final\s+)?(?!static\b|const\b)[\w<>\[\],.? ]+?\s+_?\w+\s*(=.*)?;\s*$'
+    count_over: instance_vars
+    message: 規則8「インスタンス変数は2つまで」。{count} 個ある。関連する値を値オブジェクトにまとめる
+  - id: calisthenics.instance-vars-ts
+    principle: P02
+    severity: error
+    layers: [domain]
+    languages: [typescript]
+    member_of: '\bclass\b'
+    pattern: '^\s*((public|private|protected)\s+)?readonly\s+#?\w+[?!]?\s*[:=]'
+    count_over: instance_vars
+    message: 規則8「インスタンス変数は2つまで」。{count} 個ある。関連する値を値オブジェクトにまとめる
+  - id: calisthenics.primitive-field
+    principle: P05
+    severity: warn
+    layers: [domain]
+    languages: [java, kotlin, csharp, typescript]
+    member_of: '\bclass\b'
+    pattern: '^\s*(private|protected|public|internal)?\s*(readonly\s+|final\s+|val\s+)?(String|string|int|long|double|number|decimal|BigDecimal|Int|Long)\s+\w+|^\s*(private\s+|readonly\s+)*\w+\s*:\s*(string|number|String|Int|Long)\b'
+    file_requires:
+      member_of: '\bclass\b'
+      pattern: ';\s*$|^\s*(private|readonly|val)\b'
+      min: 2
+    message: 規則3「プリミティブ型をラップする」。業務の値は値オブジェクトに

@@ -1,0 +1,47 @@
+language: ruby
+domain_forbidden_imports:
+  - '^(active_record|rails|action_\w+|net/http|faraday|httparty|sequel)'
+rules:
+  - id: ruby.accessor
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '\battr_(accessor|writer)\b'
+    message: attr_accessor/attr_writer 禁止。attr_reader と業務の言葉のメソッドで
+  - id: ruby.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '^\s*def\s+(self\.)?\w+=\s*\('
+    message: setter 禁止
+  - id: ruby.active-record
+    principle: P16
+    severity: error
+    layers: [domain]
+    pattern: '<\s*(ApplicationRecord|ActiveRecord::Base)\b'
+    message: ドメインオブジェクトを ActiveRecord にしない。app/models は Infrastructure として扱い変換する
+  - id: ruby.ivar-mutation
+    principle: P06
+    severity: error
+    layers: [domain]
+    pattern: '^\s*@\w+\s*(=|\+=|-=|<<)'
+    outside_funcs: [initialize]
+    message: 生成後にインスタンス変数を書き換えている。新しいインスタンスを返す
+  - id: ruby.return-nil
+    principle: P13
+    severity: warn
+    layers: [domain]
+    pattern: '\breturn\s+nil\b'
+    message: nil を返している。『該当なし』をオブジェクトで表せないか
+  - id: ruby.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    pattern: '^\s*case\s+[\w.@]+\s*$'
+    message: 区分による分岐。振る舞いを区分オブジェクトに持たせられないか
+  - id: ruby.class-method
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '^\s*def\s+self\.(?!(new|of|from|create\w*|parse\w*|build)\b)\w+'
+    message: インスタンス変数を使わないクラスメソッド。処理するデータを持つクラスのインスタンスメソッドにする

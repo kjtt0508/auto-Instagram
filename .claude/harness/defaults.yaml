@@ -1,0 +1,116 @@
+# ハーネスの既定値。プロジェクト固有の上書きはルートの harness.yaml に書く（deep merge）。
+version: 1
+
+# 有効な言語パック（rules/<lang>.yaml）。空なら拡張子から自動判定して全パックを適用
+languages: []
+
+docs:
+  requirements: docs/requirements
+  model: docs/model/domain.yaml
+  design: docs/design
+  adr: docs/adr
+  releases: docs/releases
+
+source:
+  exclude_dirs: [node_modules, vendor, target, build, dist, out, bin, obj, .git, .venv, venv, env,
+                 __pycache__, .next, .nuxt, .gradle, .idea, .vscode, .claude, .harness, docs, coverage, tmp, log]
+  test_patterns:
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/__tests__/**"
+    - "**/spec/**"
+    - "**/e2e/**"
+    - "**/*_test.*"
+    - "**/*_spec.*"
+    - "**/*.test.*"
+    - "**/*.spec.*"
+    - "**/test_*.py"
+    - "**/*Test.*"
+    - "**/*Tests.*"
+    - "**/*.Tests/**"
+  # 工程ゲート・モデル先行・lint の対象外（ビルド設定・ツール設定・スクリプト）
+  gate_exempt_patterns:
+    - "**/*.config.*"
+    - "**/.*rc"
+    - "**/.*rc.*"
+    - "**/*.gradle.kts"
+    - "**/*.d.ts"
+    - "scripts/**"
+    - "tools/**"
+    - "**/scripts/**"
+  migration_patterns:
+    - "**/migration/**/*.sql"
+    - "**/migrations/**/*.sql"
+    - "**/db/migrate/**/*.sql"
+    - "**/schema*.sql"
+
+# レイヤ判定：パス中のディレクトリ名（大文字小文字無視）で判定。最も深い一致を採用。
+# paths（glob）は segments より優先。スタック固有の配置は harness.yaml で paths を足す。
+architecture:
+  enabled: true
+  layers:
+    domain:
+      segments: [domain]
+    application:
+      segments: [application, usecase, usecases, use_cases, service, services]
+    presentation:
+      segments: [presentation, controller, controllers, web, handler, handlers, api, ui, views, routes, components, pages, cli, graphql, grpc]
+    infrastructure:
+      segments: [infrastructure, infra, persistence, adapter, adapters, gateway, gateways, repository_impl, datasource, external, clients]
+  # 依存してよい方向（自レイヤ内は常に可）
+  allowed:
+    presentation: [application, domain]
+    application: [domain]
+    infrastructure: [application, domain]
+    domain: []
+  # 自プロジェクト内の import を示す接頭辞（init が検出）。空なら全 import をレイヤ判定対象にする
+  internal_prefixes: []
+  # import のエイリアス → 実パス（tsconfig の paths 等。init が検出）例: {"@/": "frontend/src/"}
+  aliases: {}
+
+limits:
+  function_lines: 20
+  file_lines: 200
+  app_file_lines: 120
+  getter_warn: 3
+  primitive_params_warn: 2
+  params_warn: 3           # 引数がこれを超えたら警告（P25）
+  nesting_depth: 2         # 関数内の制御構造のネストがこれを超えたら警告（P26）
+  instance_vars: 99        # インスタンス変数の上限（calisthenics プロファイルで 2）
+
+# deny: 拒否 / ask: ユーザー確認 / warn: 通すが Claude に警告 / off
+enforcement:
+  phase_gate: deny        # 承認済み要件・ドメインモデルが無い状態での本番コード編集
+  model_first: deny       # 用語集に無い型を domain レイヤに作る
+  protect: ask            # ハーネス自体の変更
+  release: deny           # verify 未通過でのタグ付け・リリース
+  lint_errors: block      # block: 修正させる / warn: 警告のみ
+  stop_check: block       # block / warn / off
+  approval: ask           # Claude が要件を approved / done にする変更（承認はユーザーが行う）
+  bash_writes: deny       # Bash のリダイレクト・sed -i 等でソースコードを書き換える（Edit/Write を使わせる）
+
+# 追加のルールプロファイル（rules/profiles/<name>.yaml）
+#   calisthenics: 『過激なコーディング規則』（10章）— 既存コードの改善練習・教育用に一時的に有効化する
+profiles: []
+
+# domain 配下で使ってはいけない技術的な種別のディレクトリ名（P28）
+technical_package_names: [dto, dtos, entity, entities, model, models, vo, vos, bean, beans, util, utils, helper, helpers,
+                          common, constant, constants, enum, enums, type, types, interface, interfaces, impl, base]
+
+principles:
+  disabled: []            # 例: DB を持たないアプリなら [P17, P18, P19]
+
+glossary:
+  allow_names: []                                        # 用語集外でも domain に置いてよい型名
+  allow_suffixes: [Repository, Factory, Exception, Error, Id]  # <用語><接尾辞> は許可
+
+verify:
+  steps: []               # init がスタックから生成: [{name, run, cwd}]
+
+protected:
+  - .claude/harness/
+  - .claude/settings.json
+  - harness.yaml
+  - docs/principles.md
+  - .github/workflows/
+  - .harness-baseline.json

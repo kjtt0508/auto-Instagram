@@ -1,0 +1,78 @@
+language: java
+domain_forbidden_imports:
+  - '^org\.springframework\.'
+  - '^(jakarta|javax)\.(persistence|servlet|ws|validation)\.'
+  - '^com\.fasterxml\.jackson\.'
+  - '^org\.hibernate\.'
+  - '^lombok\.(Data|Setter)$'
+rules:
+  - id: java.lombok-mutable
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '@(Setter|Data)\b'
+    message: '@Setter/@Data 禁止。状態変更は業務の言葉のメソッドで表現する'
+  - id: java.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '\bvoid\s+set[A-Z]\w*\s*\('
+    message: setter 禁止。『何のために変えるのか』を表す業務メソッドにする
+  - id: java.return-null
+    principle: P13
+    severity: error
+    layers: [domain]
+    pattern: '\breturn\s+null\s*;'
+    message: null を返さない。Optional / 空オブジェクト / 『未設定』を表す型を使う
+  - id: java.public-field
+    principle: P12
+    severity: error
+    layers: [domain]
+    member_of: '\b(class|enum)\b'
+    pattern: '^\s*(@\w+\s+)*public\s+(?!static\b)[\w<>\[\],.? ]+?\s+\w+\s*(=.*)?;\s*$'
+    unless_line: '\(\s*[^)]*\)\s*;'
+    message: public フィールド禁止（内部状態を公開しない）
+  - id: java.mutable-field
+    principle: P06
+    severity: error
+    layers: [domain]
+    member_of: '\bclass\b'
+    pattern: '^\s*(@\w+\s+)*(private|protected|public)?\s*[\w<>\[\],.? ]+?\s+\w+\s*(=.*)?;\s*$'
+    unless_line: '\b(static|final|return|throw|package|import)\b|^[^=]*\('
+    message: 'フィールドは final に（不変）。可変が必要なエンティティは ADR を書き、ファイルに // harness-allow-file: P06 ADR-xxxx'
+  - id: java.raw-collection-field
+    principle: P08
+    severity: warn
+    layers: [domain]
+    member_of: '\bclass\b'
+    pattern: '^\s*(private|protected)?\s*(final\s+)?(List|Set|Map|Collection)<'
+    file_requires:          # 他のフィールドと並んでいるときだけ（コレクション専用クラス自身は対象外）
+      member_of: '\bclass\b'
+      pattern: '^\s*(@\w+\s+)*(private|protected|public)?\s*(final\s+)?[\w<>\[\],.? ]+?\s+\w+\s*(=.*)?;\s*$'
+      min: 2
+    message: 生のコレクションを他のフィールドと並べて持っている。ファーストクラスコレクションで包めないか
+  - id: java.getters
+    principle: P12
+    severity: warn
+    layers: [domain]
+    count_over: getter_warn
+    pattern: '\bpublic\s+[\w<>\[\],.? ]+?\s+get[A-Z]\w*\s*\(\s*\)'
+    message: getter が {count} 個。値を取り出して外で判断していないか（尋ねるな、命じよ）
+  - id: java.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    exclude_file_if: '^\s*(public\s+)?enum\s'
+    pattern: '\bswitch\s*\(|[=!]=\s*[A-Z]\w*\.[A-Z][A-Z0-9_]+\b'
+    message: 区分による分岐。振る舞いを区分オブジェクト(enum)側に移せないか
+  - id: java.field-injection
+    principle: P07
+    severity: warn
+    pattern: '@Autowired\s*$|@Autowired\s+(private|protected)'
+    message: フィールドインジェクションではなくコンストラクタで受け取る（完全コンストラクタ）
+  - id: java.static-method
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '\bstatic\s+(?!final\b|class\b|enum\b|record\b|interface\b|\{)[\w<>\[\],.? ]+?\s+(?!of\b|from\b|valueOf\b|create\w*\b|parse\w*\b|new\w*\b|zero\b|empty\b|none\b|main\b)[a-z]\w*\s*\('
+    message: インスタンス変数を使わない static メソッド。処理するデータを持つクラスのメソッドにする（ファクトリは of/from/create 等で命名）

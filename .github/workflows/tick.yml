@@ -1,0 +1,38 @@
+# 15分ごとの定期処理（REQ-001 設計 6.1）: ジョブの回収 → 公開用画像の準備 → 公開
+# 公開リポジトリ（ADR-0001）。秘密情報は Secrets のみ、ログには ID・件数・区分しか出さない。
+name: tick
+on:
+  schedule: [{ cron: "*/15 * * * *" }]
+  workflow_dispatch: {}
+
+concurrency: { group: tick, cancel-in-progress: false }
+
+permissions: { contents: read }
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      # ソースが変わっていなければ前回の jar を使い、毎回のビルドを省く
+      - id: jar
+        uses: actions/cache@v4
+        with:
+          path: backend/target/batch.jar
+          key: batch-jar-${{ hashFiles('backend/pom.xml', 'backend/src/main/**') }}
+      - if: steps.jar.outputs.cache-hit != 'true'
+        run: ./mvnw -B -q -DskipTests package
+        working-directory: backend
+      - run: java -jar target/batch.jar --job=tick --run-id=${{ github.run_id }}
+        working-directory: backend
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TOKEN_ENC_KEY_V1: ${{ secrets.TOKEN_ENC_KEY_V1 }}
+          IG_API_VERSION: ${{ vars.IG_API_VERSION || 'v23.0' }}

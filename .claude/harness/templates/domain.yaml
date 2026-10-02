@@ -1,0 +1,94 @@
+# docs/model/domain.yaml — 用語集兼ドメインモデル（Single Source of Truth）
+# kind: value | entity | aggregate | collection | kubun | state | rule | service | event
+# category（entity / aggregate / event に付ける）: hito（ヒト）| mono（モノ）| koto（コト：取引・約束・出来事）
+#   業務ルールはコトに集まる（P29）。コトには promises（約束すること / しないこと）を書く
+context: 受注
+terms:
+  - name_ja: 注文
+    code_name: Order
+    kind: aggregate
+    category: koto
+    definition: 顧客が商品の購入を申し込んだ事実
+    identity: 注文番号
+    promises:
+      do:
+        - 受付時点の単価で金額を確定する（後から商品価格が変わっても変えない）
+        - 在庫を引当てた数量だけ受け付ける
+      dont:
+        - 配達日時の保証（配送の約束は出荷で行う）
+        - 受付後の明細の変更（取消して再注文）
+    invariants:
+      - 注文明細は1件以上
+    behaviors:
+      - 注文金額を計算する
+      - 取り消す（状態遷移は注文状態に従う）
+    related: [顧客, 注文明細一覧, 注文状態, 金額]
+    avoid: [注文情報, 受注データ, OrderInfo, OrderData]
+
+  - name_ja: 顧客
+    code_name: Customer
+    kind: entity
+    category: hito
+    definition: 注文をする個人
+    identity: 顧客番号
+    related: [注文]
+
+  - name_ja: 商品
+    code_name: Product
+    kind: entity
+    category: mono
+    definition: 販売する品物。単価を持つ
+    identity: 商品コード
+
+  - name_ja: 注文明細一覧
+    code_name: OrderLines
+    kind: collection
+    definition: 1つの注文に含まれる注文明細の集まり
+    invariants: [1件以上, 同一商品の重複なし]
+    behaviors: [小計を合計する]
+    related: [注文明細]
+
+  - name_ja: 注文明細
+    code_name: OrderLine
+    kind: value
+    definition: 注文された商品1種類ごとの単価と数量
+    invariants: [単価と数量は必須]
+    behaviors: [小計を計算する]
+    related: [金額, 数量]
+
+  - name_ja: 金額
+    code_name: Money
+    kind: value
+    definition: 日本円の金額
+    invariants: [0以上, 1円単位]
+    behaviors: [加算する, 数量を掛ける, 税込にする]
+    avoid: [価格情報, amountValue]
+
+  - name_ja: 数量
+    code_name: Quantity
+    kind: value
+    definition: 注文する商品の個数
+    invariants: [1以上99以下]
+
+  - name_ja: 注文状態
+    code_name: OrderStatus
+    kind: state
+    definition: 注文の進行状況
+    values:
+      - {code: RECEIVED, name_ja: 受付済}
+      - {code: SHIPPED, name_ja: 出荷済}
+      - {code: CANCELLED, name_ja: 取消済}
+    transitions:
+      RECEIVED: [SHIPPED, CANCELLED]
+      SHIPPED: []
+      CANCELLED: []
+
+  - name_ja: 配送区分
+    code_name: DeliveryType
+    kind: kubun
+    definition: 配送方法の区分。区分ごとに送料の計算方法が異なる
+    values:
+      - {code: STANDARD, name_ja: 通常便}
+      - {code: EXPRESS, name_ja: 速達}
+      - {code: PICKUP, name_ja: 店頭受取}
+    behaviors: [送料を計算する]

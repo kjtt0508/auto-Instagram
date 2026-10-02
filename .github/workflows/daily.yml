@@ -1,0 +1,49 @@
+# 1日1回の定期処理（REQ-001 設計 6.4）: トークンの確認・更新
+# トークン期限が迫って更新に失敗したら終了コード 1 → ワークフローの失敗通知メールで管理者が気づく（BR-001-11）
+name: daily
+on:
+  schedule: [{ cron: "0 19 * * *" }]   # UTC 19:00 = 日本時間 4:00
+  workflow_dispatch: {}
+
+concurrency: { group: daily, cancel-in-progress: false }
+
+permissions:
+  contents: read
+  actions: write   # 月1回のワークフロー再有効化に使う
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - id: jar
+        uses: actions/cache@v4
+        with:
+          path: backend/target/batch.jar
+          key: batch-jar-${{ hashFiles('backend/pom.xml', 'backend/src/main/**') }}
+      - if: steps.jar.outputs.cache-hit != 'true'
+        run: ./mvnw -B -q -DskipTests package
+        working-directory: backend
+      - run: java -jar target/batch.jar --job=daily --run-id=${{ github.run_id }}
+        working-directory: backend
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TOKEN_ENC_KEY_V1: ${{ secrets.TOKEN_ENC_KEY_V1 }}
+          IG_API_VERSION: ${{ vars.IG_API_VERSION || 'v23.0' }}
+      # 60日間更新のない公開リポジトリは cron が止まるため、毎月1日に有効化し直す（00_基本設計 5章）
+      - name: ワークフローの再有効化（毎月1日）
+        if: ${{ always() && github.event_name == 'schedule' }}
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            gh workflow enable tick.yml
+            gh workflow enable daily.yml
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

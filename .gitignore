@@ -1,0 +1,24 @@
+# 秘密情報（公開リポジトリ。絶対にコミットしない）
+.env
+.env.*
+!.env.example
+*.pem
+.dev.vars
+
+# ビルド成果物
+node_modules/
+.next/
+out/
+dist/
+target/
+.wrangler/
+coverage/
+__pycache__/
+.harness/
+
+# IDE・OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

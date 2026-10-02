@@ -1,0 +1,46 @@
+# docs/requirements/REQ-001.yaml として保存（ファイル名 = id）
+id: REQ-001
+title: 注文を受け付ける
+status: draft            # draft → approved（open_questions が空のときのみ）→ done
+background: |
+  電話注文を手書きで受けており、金額の計算ミスと転記漏れが月数件発生している。
+actors: [顧客, 店舗スタッフ]
+
+# 業務の関心事（P22）: 画面やテーブルではなく「業務として何を気にしているか」
+# 聞き取りのコツは /domain-discovery（言葉のキャッチ・暗黙知・あいまいさの具体化）
+concerns:
+  - 注文金額が正しく計算されること（税・端数処理）
+  - 在庫を超えて受け付けないこと
+
+# 業務ルール: terms には domain.yaml の name_ja を書く（trace.py が存在を検査）
+business_rules:
+  - id: BR-001-01
+    rule: 注文金額 = 各注文明細の（単価 × 数量）の合計。消費税は合計に対して計算し1円未満切り捨て
+    terms: [注文, 注文明細, 金額, 数量]
+  - id: BR-001-02
+    rule: 数量は1以上99以下
+    terms: [数量]
+
+# 受入基準: AC-<要件番号>-<連番>。テストに同じIDを付けて紐付ける（P24）
+acceptance_criteria:
+  - id: AC-001-01
+    given: 単価1,000円の商品を3個、単価333円の商品を1個カートに入れている
+    when: 注文を確定する
+    then: 注文金額は税込3,659円になる
+  - id: AC-001-02
+    given: 数量に100を入力した
+    when: 注文を確定する
+    then: 「数量は99以下で指定してください」と表示され注文は作られない
+
+# 非機能要件（P34）: 可能なものはテストコードで表現する。テスト名/タグに NFR ID を含めて紐付ける
+non_functional:
+  - id: NFR-001-01
+    requirement: 注文確定は p95 300ms 以内
+    verify_by: test          # test | monitoring | review
+  - id: NFR-001-02
+    requirement: 同じ注文リクエストを再送しても二重登録されない（冪等）
+    verify_by: test
+out_of_scope:
+  - 決済（REQ-00x で扱う）
+open_questions:          # 空になるまで approved にしない
+  - 端数処理は明細単位か合計単位か → 経理に確認中

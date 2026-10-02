@@ -1,0 +1,127 @@
+# harness.yaml — このプロジェクト固有の設定（.claude/harness/defaults.yaml を上書きする）
+# 構成: backend/（Spring Boot + PostgreSQL / Flyway） + frontend/（Next.js App Router）のモノレポ
+#
+# ■ 最初に直すところ（★印）
+#   1. architecture.internal_prefixes の com.example を実際の base package に
+#   2. verify.steps のコマンドを実際のものに（Gradle・pnpm の場合はコメント参照）
+#   3. 既存コードに後から入れる場合は enforcement を段階導入の値に（コメント参照）
+# ■ 迷ったら: python3 .claude/harness/harness.py init --force で検出し直して差分を比べる
+
+version: 1
+
+languages: [java, typescript]
+
+docs:
+  requirements: docs/requirements
+  model: docs/model/domain.yaml
+  design: docs/design
+  adr: docs/adr
+  releases: docs/releases
+
+source:
+  exclude_dirs: [node_modules, target, build, dist, out, bin, .git, .next, .gradle, .idea, .vscode,
+                 .claude, .harness, docs, coverage, generated, __pycache__]
+  test_patterns:
+    - "**/src/test/**"
+    - "**/__tests__/**"
+    - "**/*.test.*"
+    - "**/*.spec.*"
+    - "**/*Test.java"
+    - "**/*Tests.java"
+    - "e2e/**"
+  # 工程ゲート・モデル先行・lint の対象外（ビルド・ツール設定、スクリプト）
+  gate_exempt_patterns:
+    - "**/*.config.*"          # next.config.mjs, vitest.config.ts, playwright.config.ts など
+    - "**/.*rc"
+    - "**/.*rc.*"
+    - "**/*.d.ts"
+    - "scripts/**"
+  migration_patterns:
+    - "backend/src/main/resources/db/migration/**/*.sql"   # Flyway
+    # - "backend/src/main/resources/db/changelog/**/*.sql"  # Liquibase の場合
+
+architecture:
+  layers:
+    # backend: com.example.<コンテキスト>.{presentation, application, domain, infrastructure}
+    #   パスに domain が含まれれば常に domain（domain/service のドメインサービスも domain）
+    domain:
+      segments: [domain]
+    application:
+      segments: [application, usecase, usecases, scenario, service, services]
+      paths:
+        - "frontend/src/lib/api/**"    # API クライアント：画面から使う。domain からは参照させない
+        - "frontend/src/hooks/**"
+    presentation:
+      segments: [presentation, controller, controllers, web, handler]
+      paths:
+        - "frontend/src/app/**"        # App Router
+        - "frontend/src/components/**"
+        - "frontend/src/features/**"
+    infrastructure:
+      segments: [infrastructure, infra, persistence, adapter, adapters, gateway, datasource]
+  allowed:
+    presentation: [application, domain]
+    application: [domain]
+    infrastructure: [application, domain]
+    domain: []
+  # 自プロジェクトの import だけをレイヤ判定の対象にする（外部ライブラリの誤判定を防ぐ）
+  internal_prefixes:
+    - jp.co.keai.niijimaig   # 2026-10-02 梶原の承認で変更
+  # import エイリアス → 実パス（frontend/tsconfig.json の paths と揃える）
+  aliases:
+    "@/": frontend/src/
+
+limits:
+  function_lines: 20
+  file_lines: 200
+  app_file_lines: 120     # アプリケーションサービスはこれを超えたらユースケース単位に分割
+  getter_warn: 3
+  primitive_params_warn: 2
+  params_warn: 3
+  nesting_depth: 2
+
+# deny=拒否 / ask=ユーザー確認 / warn=通して警告 / off=無効（lint_errors は block / warn）
+enforcement:
+  phase_gate: deny        # 承認済み要件・用語集が無い状態での本番コード編集
+  model_first: deny       # 用語集に無い型を domain に作る
+  approval: ask           # Claude が要件を approved / done にする（承認はユーザー）
+  bash_writes: deny       # Bash のリダイレクト・sed -i 等でソース・要件を書き換える
+  protect: ask            # ハーネス自身・ベースラインの変更
+  release: deny           # verify 未通過でのタグ付け・公開
+  lint_errors: block
+  stop_check: block
+# 既存コードに後から入れる場合は、まず次の値にして harness baseline / scaffold-model を実行し、
+# 用語集を埋め終えてから上の値に戻す:
+#   phase_gate: warn
+#   model_first: warn
+#   stop_check: warn
+
+profiles: []              # 学習・リファクタリング期間だけ [calisthenics]（過激なコーディング規則）
+
+principles:
+  disabled: []            # 例: 外部 API を公開しないなら [P20, P21, P33]
+
+glossary:
+  allow_names: []
+  allow_suffixes: [Repository, Factory, Exception, Error, Id]
+
+verify:
+  steps:
+    - name: backend（テスト・ArchUnit）
+      run: ./mvnw -B -q verify              # ★ Gradle の場合: ./gradlew check
+      cwd: backend
+    - name: frontend（lint・テスト・ビルド）
+      run: npm run lint && npm run test --if-present -- --run && npm run build   # ★ pnpm の場合は pnpm run ...
+      cwd: frontend
+    # - name: E2E（主要な受入基準）
+    #   run: npx playwright test
+    #   cwd: e2e
+
+protected:
+  - .claude/harness/
+  - .claude/settings.json
+  - harness.yaml
+  - docs/principles.md
+  - .github/workflows/
+  - .harness-baseline.json
+  - backend/src/test/java/jp/co/keai/niijimaig/architecture/ArchitectureTest.java

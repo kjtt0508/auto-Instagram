@@ -1,0 +1,53 @@
+language: csharp
+domain_forbidden_imports:
+  - '^Microsoft\.(EntityFrameworkCore|AspNetCore)'
+  - '^System\.(Data|Net\.Http|Text\.Json|Web)'
+  - '^(Newtonsoft|Dapper)\b'
+rules:
+  - id: cs.public-setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '(^|[\s{;])set\s*[;{]'
+    unless_line: '\bprivate\s+set\b|\binit\s*;'
+    message: 公開 setter 禁止。init / 業務の言葉のメソッドで
+  - id: cs.public-field
+    principle: P12
+    severity: error
+    layers: [domain]
+    member_of: '\b(class|record|struct)\b'
+    pattern: '^\s*public\s+(?!static\b|const\b|readonly\b|class\b|enum\b|record\b|interface\b)[\w<>\[\],.? ]+?\s+\w+\s*(=[^>].*)?;\s*$'
+    message: public フィールド禁止
+  - id: cs.mutable-field
+    principle: P06
+    severity: error
+    layers: [domain]
+    member_of: '\b(class|record|struct)\b'
+    pattern: '^\s*(private|protected|internal)\s+(?!readonly\b|const\b|static\b)[\w<>\[\],.? ]+?\s+_?\w+\s*(=.*)?;\s*$'
+    message: フィールドは readonly に（不変）
+  - id: cs.return-null
+    principle: P13
+    severity: error
+    layers: [domain]
+    pattern: '\breturn\s+null\s*;'
+    message: null を返さない
+  - id: cs.persistence-attr
+    principle: P16
+    severity: error
+    layers: [domain]
+    pattern: '\[(Key|Column|Table|ForeignKey|JsonProperty|JsonPropertyName|Required)\b'
+    message: ドメインに永続化/シリアライズ属性。マッピングは Infrastructure で
+  - id: cs.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    exclude_file_if: '^\s*(public\s+)?enum\s'
+    pattern: '\bswitch\s*\(|[=!]=\s*[A-Z]\w*\.[A-Z]\w+\b'
+    message: 区分による分岐。振る舞いを区分型（スマート enum）に持たせられないか
+  - id: cs.static-method
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '\bstatic\s+(?!readonly\b|class\b|implicit\b|explicit\b|operator\b)[\w<>\[\],.? ]+?\s+(?!Of\b|From\b|Create\w*\b|Parse\w*\b|TryParse\b|Zero\b|Empty\b|None\b|operator\b)[A-Z]\w*\s*\('
+    unless_line: '=\s*new\b'
+    message: インスタンス変数を使わない static メソッド。処理するデータを持つ型のメソッドにする

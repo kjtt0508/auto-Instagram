@@ -1,0 +1,642 @@
+# docs/model/domain.yaml — 用語集兼ドメインモデル（Single Source of Truth）
+# 出典: 「新島info Instagram自動投稿システム 要件定義書」（2026-10-01, Claude Docs）
+# kind: value | entity | aggregate | collection | kubun | state | rule | service | event
+# category: hito（ヒト）| mono（モノ）| koto（コト）
+# 状態: 下書き（AIによる初版）。値に「要確認」とあるものはフェーズ0で確定する
+context: 新島info投稿運用
+terms:
+  # ───────── ヒト ─────────
+  - name_ja: 団体
+    code_name: Tenant
+    kind: entity
+    category: hito
+    definition: システムを利用する組織。当面は新島info の1件のみ。将来のマルチテナント化の単位
+    identity: 団体ID
+    behaviors:
+      - 利用するLLMのモデル名・LLM上限・公開猶予を設定として返す
+    related: [メンバー, Instagram連携, LLM上限, 公開猶予]
+    avoid: [組織, テナント情報]
+
+  - name_ja: メンバー
+    code_name: Member
+    kind: entity
+    category: hito
+    definition: 管理画面にログインできる人。許可リストに載ったGoogleアカウントで識別する
+    identity: メンバーID（ログイン前はGoogleアカウントのメールアドレス）
+    invariants:
+      - 1人に1つのロールを持つ
+      - 無効化されたメンバーはログインできない（削除せず無効化を記録する）
+    behaviors:
+      - ロールに従って操作できるかを判断する
+    related: [団体, ロール]
+    avoid: [利用者アカウント, UserInfo]
+
+  - name_ja: ロール
+    code_name: Role
+    kind: kubun
+    definition: メンバーができる操作の範囲
+    values:
+      - {code: ADMIN, name_ja: 管理者}
+      - {code: APPROVER, name_ja: 承認者}
+      - {code: EDITOR, name_ja: 編集者}
+    behaviors:
+      - 承認・予約の確定ができるか（ADMIN, APPROVER）
+      - メンバーを追加・削除（無効化）・ロール変更できるか（APPROVER, ADMIN。運用は新島info側の承認者が担う。管理者ロールの付与・変更は ADMIN のみ）
+      - テンプレート・プロンプト版・Instagram連携を管理できるか（ADMIN）
+      - 下書きの作成・編集・承認依頼ができるか（全ロール）
+    related: [メンバー]
+    avoid: [権限フラグ, isAdmin]
+
+  # ───────── Instagram 連携 ─────────
+  - name_ja: Instagram連携
+    code_name: InstagramConnection
+    kind: aggregate
+    category: koto
+    definition: 新島infoのInstagramアカウントに、システムが代わりに投稿してよいという許可（OAuthで得たアクセストークン）の記録
+    identity: 団体ID（1団体1連携）
+    promises:
+      do:
+        - アクセストークンは暗号化して保持し、画面・ログ・LLMに出さない
+        - トークン有効期限の残りを毎日確認し、更新できるものは更新する
+      dont:
+        - Instagramアカウント本体のパスワードを預かること
+        - 連携が切れている間の投稿を後から自動で取り戻すこと（失敗として記録し人が再実行する）
+    invariants:
+      - 連携中はIGユーザーID・アクセストークン・トークン有効期限がそろっている
+    behaviors:
+      - 更新が必要かを判断する（トークン有効期限による）
+      - 警告が必要かを判断する
+      - 新しいトークンで更新される（更新の記録を追記）
+      - 解除される
+    related: [アクセストークン, トークン有効期限, 団体]
+    avoid: [IG設定, トークン情報]
+
+  - name_ja: アクセストークン
+    code_name: AccessToken
+    kind: value
+    definition: Instagram APIを呼ぶための長期アクセストークン。保存時は暗号化した形で扱う
+    invariants:
+      - 空文字でない
+      - 文字列表現（toString）では値を伏せる
+    related: [Instagram連携]
+
+  - name_ja: トークン有効期限
+    code_name: TokenExpiry
+    kind: value
+    definition: アクセストークンが失効する日時
+    invariants:
+      - 日時（タイムゾーン付き）であること
+    behaviors:
+      - 残り日数を返す
+      - 更新が必要か（残り30日以下。要確認）
+      - 警告が必要か（残り14日以下。要確認）
+      - 意図的にワークフローを失敗させるか（残り7日以下かつ更新失敗。要確認）
+    related: [Instagram連携]
+
+  # ───────── 投稿 ─────────
+  - name_ja: 投稿
+    code_name: Post
+    kind: aggregate
+    category: koto
+    definition: Instagramのフィードに1回公開する単位。下書きから公開済み／失敗までの一連の出来事
+    identity: 投稿ID
+    promises:
+      do:
+        - 承認された内容（キャプション・投稿画像一覧・PR区分）だけを公開する
+        - PR区分がPRの投稿は、キャプションの先頭にPR表記を必ず付けて公開する
+        - 公開の成否と失敗理由を投稿履歴に記録する
+        - 同じ投稿を二重に公開しない
+      dont:
+        - 予約日時ぴったりの公開（定期処理の間隔15分の範囲で遅れる）
+        - 公開猶予を過ぎた投稿の自動公開（失敗として人に判断を戻す）
+        - 公開後の内容の編集（Instagram側で行う）
+    invariants:
+      - 投稿画像一覧は投稿種別の枚数範囲に収まる
+      - 承認待ち以降はキャプション・投稿画像一覧・PR区分が確定している
+    behaviors:
+      - 承認を依頼する
+      - 承認する（予約日時を確定し予約中にする）
+      - 修正指示を受ける（下書きに戻す）
+      - 予約を取り消す
+      - 公開を始める／公開済みになる／失敗する
+      - 再実行する（失敗から予約中に戻す）
+      - 公開用のキャプションを作る（PR表記の付与はPR区分に委ねる）
+    related: [投稿種別, 投稿画像一覧, キャプション, PR区分, 予約日時, 投稿状態, 投稿履歴, 公開結果, 失敗理由]
+    avoid: [投稿データ, PostInfo, 記事]
+
+  - name_ja: 投稿種別
+    code_name: PostFormat
+    kind: kubun
+    definition: フィード投稿の形式
+    values:
+      - {code: FEED_IMAGE, name_ja: 画像}
+      - {code: CAROUSEL, name_ja: カルーセル}
+    behaviors:
+      - 投稿画像の枚数範囲を返す（画像=1枚、カルーセル=2〜10枚。上限は要確認）
+      - Instagramへの公開手順を選ぶ（カルーセルは子コンテナを先に作る）
+
+  - name_ja: 投稿画像
+    code_name: PostMedia
+    kind: value
+    definition: 投稿に含まれる1枚の画像。順番・保存先・幅・高さを持つ
+    invariants:
+      - 順番は1以上
+      - 画像仕様を満たす
+    behaviors:
+      - アスペクト比を返す
+    related: [画像仕様]
+
+  - name_ja: 投稿画像一覧
+    code_name: PostMediaList
+    kind: collection
+    definition: 1つの投稿の投稿画像の並び
+    invariants:
+      - 順番が1から連番
+      - カルーセルの場合、全画像のアスペクト比が1枚目と同じ
+    behaviors:
+      - 枚数が投稿種別の範囲内かを判断する
+      - 1枚目のアスペクト比を返す
+
+  - name_ja: 画像仕様
+    code_name: ImageSpec
+    kind: rule
+    definition: Instagram APIで公開できる画像の条件
+    invariants:
+      - 形式はJPEG（Graph APIの画像投稿はJPEGのみ）
+      - 8MB以下
+      - アスペクト比 4:5（0.8）〜 1.91:1
+      - 幅 320〜1440px
+    behaviors:
+      - 画像が仕様を満たすか判断し、満たさない項目を返す
+
+  - name_ja: キャプション
+    code_name: Caption
+    kind: value
+    definition: 投稿の本文。ハッシュタグを含む
+    invariants:
+      - 2,200文字以下（公開時のPR表記を含めて）
+      - ハッシュタグは30個以下
+    behaviors:
+      - 含まれるハッシュタグを数える
+      - 先頭に文字列を付けた新しいキャプションを返す
+    related: [ハッシュタグ]
+
+  - name_ja: ハッシュタグ
+    code_name: Hashtag
+    kind: value
+    definition: 「#」で始まる分類語
+    invariants:
+      - 「#」で始まり空白を含まない
+
+  - name_ja: PR区分
+    code_name: PrCategory
+    kind: kubun
+    definition: 対価を受けた広告（PR案件）かどうかの区分。ステルスマーケティング規制への対応
+    values:
+      - {code: NONE, name_ja: 通常}
+      - {code: PR, name_ja: PR案件}
+    behaviors:
+      - 公開用キャプションにPR表記を付ける（PR案件のみ。表記の文言は要確認）
+      - PR表記が必要かを返す
+
+  - name_ja: 予約日時
+    code_name: ScheduledAt
+    kind: value
+    definition: 公開してほしい日時（日本時間で入力、タイムゾーン付きで保持）
+    invariants:
+      - 予約を確定する時点で現在より後、かつ1年以内（確定用の生成 decide）
+      - 例外として、失敗の再実行の「今すぐ」は確定時点の現在時刻（immediate）
+      - 記録から復元するときは検査しない（restore。公開時には過去なのが正常）
+    behaviors:
+      - 公開してよい時刻になったか判断する
+      - 公開猶予を過ぎたか判断する（公開猶予に委ねる）
+
+  - name_ja: 公開猶予
+    code_name: PublishGrace
+    kind: rule
+    definition: 予約日時を過ぎてから自動公開してよい最大の遅れ。超えたら人に判断を戻す
+    invariants:
+      - 既定6時間（要確認）
+    behaviors:
+      - 予約日時と現在時刻から、自動公開してよいかを判断する
+
+  - name_ja: 投稿状態
+    code_name: PostStatus
+    kind: state
+    definition: 投稿の進行状況。投稿履歴から導出する
+    values:
+      - {code: DRAFT, name_ja: 下書き}
+      - {code: AWAITING_APPROVAL, name_ja: 承認待ち}
+      - {code: SCHEDULED, name_ja: 予約中}
+      - {code: PUBLISHING, name_ja: 公開処理中}
+      - {code: PUBLISHED, name_ja: 公開済み}
+      - {code: FAILED, name_ja: 失敗}
+      - {code: DISCARDED, name_ja: 破棄}
+    transitions:
+      DRAFT: [AWAITING_APPROVAL, DISCARDED]
+      AWAITING_APPROVAL: [SCHEDULED, DRAFT, DISCARDED]
+      SCHEDULED: [PUBLISHING, DRAFT, FAILED]
+      PUBLISHING: [PUBLISHED, FAILED, SCHEDULED]   # SCHEDULED: 上限超過で次の定期処理に回す（公開延期）
+      PUBLISHED: []
+      FAILED: [SCHEDULED, DRAFT, DISCARDED]
+      DISCARDED: []
+    behaviors:
+      - 遷移できるか判断する
+      - 編集できるか（下書きのみ）
+      - カレンダーでの色区分を返す
+
+  - name_ja: 投稿履歴
+    code_name: PostEvent
+    kind: event
+    category: koto
+    definition: 投稿に起きた出来事の記録（作成、承認依頼、承認、修正指示、予約取消、公開開始、公開延期、公開、失敗、再実行、下書きに戻す、破棄）。追記のみ。出来事の種類ごとに許される遷移が決まっている
+    identity: 投稿履歴ID
+    promises:
+      do:
+        - 誰が・いつ・何をしたかを残す
+      dont:
+        - 記録の変更・削除
+    related: [投稿, 投稿状態, メンバー]
+
+  - name_ja: 公開結果
+    code_name: PublishResult
+    kind: value
+    definition: 公開に成功したときにInstagramから得た情報
+    invariants:
+      - メディアIDと公開日時は必須
+    related: [投稿]
+
+  - name_ja: 失敗理由
+    code_name: FailureReason
+    kind: value
+    definition: 公開に失敗した理由。失敗区分と人が読める説明
+    invariants:
+      - 説明は空でない
+    related: [失敗区分]
+
+  - name_ja: 失敗区分
+    code_name: FailureKind
+    kind: kubun
+    definition: 失敗の種類。自動リトライの可否が変わる
+    values:
+      - {code: TRANSIENT, name_ja: 一時的なエラー}
+      - {code: RATE_LIMITED, name_ja: 上限超過}
+      - {code: TOKEN_INVALID, name_ja: 連携切れ}
+      - {code: MEDIA_REJECTED, name_ja: 画像・内容の不備}
+      - {code: GRACE_EXCEEDED, name_ja: 公開猶予切れ}
+      - {code: UNKNOWN, name_ja: 不明}
+    behaviors:
+      - 同じジョブ内で自動リトライしてよいか（TRANSIENT, RATE_LIMITED のみ）
+      - 画面に出す対処方法を返す
+
+  # ───────── 定期処理 ─────────
+  - name_ja: ジョブ
+    code_name: Job
+    kind: entity
+    category: koto
+    definition: 定期処理が行う1件の仕事（公開用画像の準備・公開・トークン更新など）。二重実行を防ぐ単位。公開用画像の準備は、テンプレートの投稿なら画像化、アップロード画像なら公開用の保存先への複製
+    identity: ジョブID
+    promises:
+      do:
+        - 同じ仕事は同時に1つの処理しか実行しない
+        - 実行期限を過ぎた実行中ジョブは再実行可能に戻す
+      dont:
+        - 実行時刻ぴったりの開始
+    invariants:
+      - 試行回数は最大試行回数以下
+    behaviors:
+      - 実行権を取得する（期限付き）
+      - 成功する／失敗する／再試行に回る
+    related: [ジョブ種別, ジョブ状態, 投稿]
+
+  - name_ja: ジョブ種別
+    code_name: JobType
+    kind: kubun
+    definition: ジョブの種類
+    values:
+      - {code: PREPARE_MEDIA, name_ja: 公開用画像の準備}
+      - {code: PUBLISH_POST, name_ja: 公開}
+      - {code: REFRESH_TOKEN, name_ja: トークン更新}
+      - {code: COLLECT_INSIGHTS, name_ja: インサイト収集}
+      - {code: COLLECT_NEWS, name_ja: ネタ収集}
+      - {code: GENERATE_DRAFTS, name_ja: 下書き一括生成}
+    behaviors:
+      - 最大試行回数を返す
+      - 実行期限（ロックの長さ）を返す
+
+  - name_ja: ジョブ状態
+    code_name: JobStatus
+    kind: state
+    definition: ジョブの進行状況
+    values:
+      - {code: PENDING, name_ja: 待機}
+      - {code: RUNNING, name_ja: 実行中}
+      - {code: SUCCEEDED, name_ja: 成功}
+      - {code: FAILED, name_ja: 失敗}
+    transitions:
+      PENDING: [RUNNING]
+      RUNNING: [SUCCEEDED, FAILED, PENDING]
+      SUCCEEDED: []
+      FAILED: []
+
+  - name_ja: バッチ稼働記録
+    code_name: BatchHeartbeat
+    kind: event
+    category: koto
+    definition: 定期処理が動いたことの記録。止まっていることの検知に使う
+    identity: 稼働記録ID
+    promises:
+      do:
+        - 定期処理の開始と終了を記録する
+      dont:
+        - 個々のジョブの成否の記録（ジョブで行う）
+
+  - name_ja: 警告
+    code_name: Alert
+    kind: kubun
+    definition: 管理画面のログイン時に表示する警告の種類。記録から導出し、保存しない
+    values:
+      - {code: TOKEN_EXPIRING, name_ja: トークン期限が近い}
+      - {code: TOKEN_REFRESH_FAILED, name_ja: トークン更新失敗}
+      - {code: CONNECTION_MISSING, name_ja: Instagram未連携}
+      - {code: LLM_LIMIT_NEAR, name_ja: 生成上限が近い}
+      - {code: LLM_LIMIT_REACHED, name_ja: 生成上限に到達}
+      - {code: PUBLISH_FAILED, name_ja: 投稿失敗あり}
+      - {code: BATCH_STOPPED, name_ja: 定期処理が止まっている}
+    behaviors:
+      - 重要度（エラー／注意）を返す
+      - 表示文言と対処リンクを返す
+
+  # ───────── AI 生成 ─────────
+  - name_ja: テンプレート
+    code_name: Template
+    kind: entity
+    category: mono
+    definition: 新島infoのトンマナを表すHTML/CSS。スライドの文言を流し込んで画像にする
+    identity: テンプレートID
+    invariants:
+      - 出力サイズは画像仕様を満たす（既定1080×1350）
+      - 差し込み項目はスライドの項目だけ
+    behaviors:
+      - スライドを差し込んだHTMLを作る（文言はHTMLエスケープする）
+    related: [スライド, スライド役割]
+
+  - name_ja: スライド
+    code_name: Slide
+    kind: value
+    definition: 投稿画像1枚分の文言（見出し・本文）と役割
+    invariants:
+      - 見出しは40文字以下、本文は200文字以下（要確認。テンプレートで決まる）
+    related: [スライド役割]
+
+  - name_ja: スライド役割
+    code_name: SlideRole
+    kind: kubun
+    definition: カルーセル内でのスライドの役割。役割ごとに使うテンプレートが変わる
+    values:
+      - {code: COVER, name_ja: 表紙}
+      - {code: BODY, name_ja: 本文}
+      - {code: CLOSING, name_ja: まとめ}
+    behaviors:
+      - 使うテンプレートの用途を返す
+
+  - name_ja: 下書き案
+    code_name: DraftProposal
+    kind: value
+    definition: AIが生成した投稿の案（スライド構成・キャプション・ハッシュタグ・PR区分・参照元URL）。投稿に取り込んで編集する
+    invariants:
+      - スライドは1〜10枚
+      - 参照元URLは、ネタの出どころがニュースの場合は1件以上
+    related: [スライド, キャプション, PR区分]
+
+  - name_ja: 生成
+    code_name: Generation
+    kind: event
+    category: koto
+    definition: LLMに下書き案を作らせた1回の出来事。入力・出力・プロンプト版・生成経路・その後の承認／修正の結果を残す
+    identity: 生成ID
+    promises:
+      do:
+        - 入力と出力をそのまま残し、品質改善と分析に使えるようにする
+        - 入稿者連絡先などの個人情報を入力に含めない
+      dont:
+        - 出力内容の事実性の保証（人の承認で担保する）
+    related: [プロンプト版, 生成経路, 下書き案, 修正指示]
+
+  - name_ja: 生成経路
+    code_name: GenerationRoute
+    kind: kubun
+    definition: 下書き案をどうやって得たか
+    values:
+      - {code: API, name_ja: Gemini API}
+      - {code: MANUAL, name_ja: 手動コピペ}
+    behaviors:
+      - LLM利用回数を数えるか（APIのみ）
+
+  - name_ja: プロンプト版
+    code_name: PromptVersion
+    kind: entity
+    category: mono
+    definition: 用途ごとのプロンプト本文の1つの版。用途ごとに有効な版は1つ
+    identity: プロンプト版ID
+    invariants:
+      - 版番号は用途ごとに1から連番
+      - 本文は変更しない（変えるときは新しい版を作る）
+    related: [プロンプト用途]
+
+  - name_ja: プロンプト用途
+    code_name: PromptPurpose
+    kind: kubun
+    definition: プロンプトの使い道
+    values:
+      - {code: PLAN, name_ja: 企画生成}
+      - {code: CAPTION, name_ja: キャプション生成}
+      - {code: REVISE, name_ja: 修正指示による再生成}
+    behaviors:
+      - 出力のJSONスキーマを返す
+
+  - name_ja: 再生成方針
+    code_name: GenerationRetryPolicy
+    kind: rule
+    definition: LLMの出力が下書き案の条件を満たさなかったとき、違反内容を添えて作り直してよいかの判断
+    invariants:
+      - 1回の依頼につき作り直しは1回まで
+    behaviors:
+      - 作り直してよいか判断する（違反があり、まだ作り直していない）
+      - 作り直しのときにLLMへ渡す違反の説明を作る
+
+  - name_ja: 修正指示
+    code_name: RevisionInstruction
+    kind: value
+    definition: 承認者・編集者が自然文で出す直してほしい点（例「もっとくだけた感じで」）
+    invariants:
+      - 1〜500文字
+
+  - name_ja: LLM利用回数
+    code_name: LlmUsage
+    kind: aggregate
+    category: koto
+    definition: 団体・日付・モデルごとのLLM呼び出し回数。無料枠の上限管理に使う
+    identity: 団体ID＋日付（太平洋時間）＋モデル名
+    promises:
+      do:
+        - 呼び出し前に1回分を確保し、上限を超える呼び出しをさせない
+      dont:
+        - Google側の実際の残量との一致（自前の数え方で控えめに止める）
+    behaviors:
+      - 1回分を確保する（上限到達なら拒否）
+      - 上限に近いか判断する
+    related: [LLM上限]
+
+  - name_ja: LLM上限
+    code_name: LlmQuota
+    kind: value
+    definition: 1日に使ってよいLLM呼び出し回数と、警告を出す割合
+    invariants:
+      - 上限は1以上
+      - 警告割合は0より大きく1以下（既定0.8）
+
+  # ───────── 企画・承認・PR ─────────
+  - name_ja: ネタ
+    code_name: Idea
+    kind: entity
+    category: koto
+    definition: 投稿の元になる情報。運営メモ・大学ニュース・PR入稿のどれかから生まれる
+    identity: ネタID
+    promises:
+      do:
+        - 出どころと、ニュースなら参照元URLを必ず残す
+      dont:
+        - 投稿になることの保証（使うかは人が決める）
+        - 公式サイトの文章・画像の保持（事実だけを持つ）
+    invariants:
+      - 本文は1〜2,000文字
+      - ネタの出どころがニュースなら参照元URLを持つ
+    behaviors:
+      - 投稿に使われた／見送られた
+    related: [ネタの出どころ]
+
+  - name_ja: ネタの出どころ
+    code_name: IdeaSource
+    kind: kubun
+    definition: ネタがどこから来たか
+    values:
+      - {code: MEMO, name_ja: 運営メモ}
+      - {code: NEWS, name_ja: 大学ニュース}
+      - {code: PR, name_ja: PR入稿}
+    behaviors:
+      - 生成した投稿のPR区分の初期値を返す（PR入稿ならPR案件）
+      - PR区分を通常に変えられないか（PR入稿なら変えられない。画面・一括生成・公開直前の3か所で検査する）
+      - 参照元URLが必須か
+
+  - name_ja: PR入稿
+    code_name: PrSubmission
+    kind: aggregate
+    category: koto
+    definition: サークル・企業が入稿フォームから送った掲載依頼
+    identity: PR入稿ID
+    promises:
+      do:
+        - 採用したらネタ（出どころ=PR入稿）を作る
+        - 入稿者連絡先をLLMに渡さない
+      dont:
+        - 掲載や希望日どおりの公開の保証（採否は承認者が決める）
+    invariants:
+      - 文面は1〜2,000文字、画像は0〜10枚
+    behaviors:
+      - 採用する／不採用にする
+    related: [入稿者連絡先, 採否, ネタ]
+
+  - name_ja: 入稿者連絡先
+    code_name: SubmitterContact
+    kind: value
+    definition: PR入稿者の団体名・担当者名・連絡先。個人情報として扱う
+    invariants:
+      - メールアドレスの形式が正しい
+      - LLMへの入力に含めない
+
+  - name_ja: 採否
+    code_name: SubmissionDecision
+    kind: state
+    definition: PR入稿の判断状況
+    values:
+      - {code: RECEIVED, name_ja: 受付}
+      - {code: ACCEPTED, name_ja: 採用}
+      - {code: REJECTED, name_ja: 不採用}
+    transitions:
+      RECEIVED: [ACCEPTED, REJECTED]
+      ACCEPTED: []
+      REJECTED: []
+
+  - name_ja: 自動チェック
+    code_name: AutoCheck
+    kind: rule
+    definition: 承認前に投稿内容を機械的に検査する規則の集まり。結果は警告として出し、承認を止めない
+    behaviors:
+      - 投稿を検査してチェック結果の一覧を返す
+    related: [チェック項目, チェック結果]
+
+  - name_ja: チェック項目
+    code_name: CheckKind
+    kind: kubun
+    definition: 自動チェックの検査項目
+    values:
+      - {code: PR_SUSPECTED, name_ja: PR案件の可能性}
+      - {code: DATE_WEEKDAY_MISMATCH, name_ja: 日付と曜日の矛盾}
+      - {code: PERSONAL_NAME, name_ja: 個人名の可能性}
+      - {code: NG_EXPRESSION, name_ja: NG表現}
+      - {code: IMAGE_SPEC, name_ja: 画像仕様違反}
+      - {code: SOURCE_URL_MISSING, name_ja: 参照元URLなし}
+    behaviors:
+      - 重要度を返す（画像仕様違反はエラー、他は注意）
+
+  - name_ja: チェック結果
+    code_name: CheckFinding
+    kind: value
+    definition: 自動チェックで見つかった1件の指摘
+    invariants:
+      - チェック項目とメッセージは必須
+
+  - name_ja: NG表現
+    code_name: NgExpression
+    kind: value
+    definition: 団体が登録した、投稿に使わない言葉
+    invariants:
+      - 1〜50文字
+
+  # ───────── 収集・分析 ─────────
+  - name_ja: ニュースソース
+    code_name: NewsSource
+    kind: entity
+    category: mono
+    definition: 大学公式サイトの、ネタ収集の対象とするRSSまたはページ
+    identity: ニュースソースID
+    invariants:
+      - 取得方式はRSSまたはページ差分
+
+  - name_ja: インサイト
+    code_name: InsightSnapshot
+    kind: event
+    category: koto
+    definition: ある日に取得した、公開済み投稿1件の反応の数値（リーチ・保存数・シェア数など）
+    identity: 投稿ID＋取得日
+    promises:
+      do:
+        - 1投稿1日1件、追記で残す
+      dont:
+        - Instagram側が後から補正した数値の遡り反映
+    related: [投稿]
+
+  - name_ja: ジャンル
+    code_name: Genre
+    kind: value
+    definition: 投稿の内容の分類（例 イベント、締切リマインド、サークル紹介）。団体が定義する
+    invariants:
+      - 1〜20文字
+
+  - name_ja: 伸びた投稿
+    code_name: StandoutPost
+    kind: rule
+    definition: 企画生成で「良い例」として渡す過去の投稿。直近90日の公開済み投稿のうち、リーチあたり保存数の上位（要確認）
+    behaviors:
+      - 公開済み投稿とインサイトから上位N件を選ぶ

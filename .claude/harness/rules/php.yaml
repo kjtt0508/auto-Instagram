@@ -1,0 +1,50 @@
+language: php
+domain_forbidden_imports:
+  - '^(Illuminate|Laravel)\\'
+  - '^Doctrine\\ORM'
+  - '^Symfony\\Component\\(HttpFoundation|HttpKernel|Routing)'
+  - '^GuzzleHttp\\'
+rules:
+  - id: php.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '\bfunction\s+set[A-Z]\w*\s*\('
+    message: setter 禁止。業務の言葉のメソッドで新しいオブジェクトを返す
+  - id: php.public-property
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '\bpublic\s+(?!function\b|const\b|static\b|readonly\b)(\??[\w\\|]+\s+)?\$\w+'
+    message: public プロパティは readonly に
+  - id: php.mutable-property
+    principle: P06
+    severity: error
+    layers: [domain]
+    pattern: '\b(private|protected)\s+(?!readonly\b|function\b|const\b|static\b)(\??[\w\\|]+\s+)?\$\w+'
+    message: プロパティは readonly に（不変）
+  - id: php.return-null
+    principle: P13
+    severity: error
+    layers: [domain]
+    pattern: '\breturn\s+null\s*;'
+    message: null を返さない
+  - id: php.active-record
+    principle: P16
+    severity: error
+    layers: [domain]
+    pattern: '\bextends\s+(Model|Eloquent|\\?Illuminate\\Database\\Eloquent\\Model)\b'
+    message: ドメインオブジェクトを ORM モデルにしない。Eloquent モデルは Infrastructure 側で変換
+  - id: php.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    exclude_file_if: '^\s*enum\s'
+    pattern: '\bswitch\s*\(|\bmatch\s*\(|===?\s*\w+::[A-Z][A-Za-z0-9_]+\b'
+    message: 区分による分岐。振る舞いを enum 側のメソッドに持たせられないか
+  - id: php.static-method
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '\bstatic\s+function\s+(?!(of|from|create\w*|parse\w*|zero|empty|none)\b)\w+'
+    message: インスタンス変数を使わない static メソッド。処理するデータを持つクラスのメソッドにする

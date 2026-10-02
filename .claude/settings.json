@@ -1,0 +1,102 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/harness/harness.py:*)",
+      "Bash(python .claude/harness/harness.py:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(./mvnw:*)",
+      "Bash(mvn:*)",
+      "Bash(./gradlew:*)",
+      "Bash(npm run:*)",
+      "Bash(pnpm run:*)",
+      "Bash(yarn run:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(mypy:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet build:*)",
+      "Bash(composer test)",
+      "Bash(vendor/bin/phpunit:*)",
+      "Bash(bundle exec rspec:*)",
+      "Bash(bundle exec rake test:*)"
+    ],
+    "ask": [
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(gh release:*)",
+      "Bash(npm publish:*)",
+      "Bash(pnpm publish:*)",
+      "Bash(yarn publish:*)",
+      "Bash(python3 .claude/harness/harness.py baseline:*)",
+      "Bash(python .claude/harness/harness.py baseline:*)",
+      "Bash(python3 .claude/harness/harness.py init:*)",
+      "Bash(python .claude/harness/harness.py init:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/secrets/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/harness/harness.py\" hook session",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/harness/harness.py\" hook pre",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/harness/harness.py\" hook post",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/harness/harness.py\" hook stop",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

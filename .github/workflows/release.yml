@@ -1,0 +1,21 @@
+name: release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - name: リリースノートの存在確認
+        run: test -f "docs/releases/${GITHUB_REF_NAME}.md" || { echo "docs/releases/${GITHUB_REF_NAME}.md がありません"; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: docs/releases/${{ github.ref_name }}.md
+      # デプロイ・パッケージ公開はここに追加（GitHub Environments の承認を挟む）

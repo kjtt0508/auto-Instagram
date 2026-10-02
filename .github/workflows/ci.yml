@@ -1,0 +1,62 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  harness:
+    name: 設計原則・トレーサビリティ
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml
+      - name: harness check --strict
+        run: python3 .claude/harness/harness.py check --strict
+
+  verify:
+    name: ビルド・テスト（harness.yaml の verify.steps）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pyyaml
+      # 使っているスタックのツールチェーンだけが準備される
+      - if: hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != ''
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - if: hashFiles('**/package.json') != ''
+        uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - if: hashFiles('**/package-lock.json') != ''
+        run: for d in $(git ls-files '**/package-lock.json' 'package-lock.json' | xargs -n1 dirname); do (cd "$d" && npm ci); done
+      - if: hashFiles('**/pnpm-lock.yaml') != ''
+        run: corepack enable && for d in $(git ls-files '**/pnpm-lock.yaml' 'pnpm-lock.yaml' | xargs -n1 dirname); do (cd "$d" && pnpm install --frozen-lockfile); done
+      - if: hashFiles('**/pyproject.toml', '**/requirements.txt') != ''
+        run: |
+          for f in $(git ls-files '**/requirements*.txt' 'requirements*.txt'); do pip install -r "$f"; done
+          for d in $(git ls-files '**/pyproject.toml' 'pyproject.toml' | xargs -n1 dirname); do (cd "$d" && pip install -e ".[dev]" 2>/dev/null || pip install -e . || true); done
+          pip install pytest
+      - if: hashFiles('**/go.mod') != ''
+        uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - if: hashFiles('**/*.csproj', '**/*.sln') != ''
+        uses: actions/setup-dotnet@v4
+        with: { dotnet-version: "8.0.x" }
+      - if: hashFiles('**/composer.json') != ''
+        uses: shivammathur/setup-php@v2
+        with: { php-version: "8.3", tools: composer }
+      - if: hashFiles('**/composer.json') != ''
+        run: for d in $(git ls-files '**/composer.json' 'composer.json' | xargs -n1 dirname); do (cd "$d" && composer install --no-interaction); done
+      - if: hashFiles('**/Gemfile') != ''
+        uses: ruby/setup-ruby@v1
+        with: { ruby-version: "3.3", bundler-cache: false }
+      - if: hashFiles('**/Gemfile') != ''
+        run: for d in $(git ls-files '**/Gemfile' 'Gemfile' | xargs -n1 dirname); do (cd "$d" && bundle install); done
+      - name: verify
+        run: python3 .claude/harness/harness.py verify

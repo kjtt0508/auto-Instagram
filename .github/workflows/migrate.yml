@@ -1,0 +1,32 @@
+# 本番 DB へのマイグレーション（Flyway）。手動実行のみ・承認付き environment（00_基本設計 7章）
+# --job を付けずに起動すると、Flyway だけが流れて定期処理は動かない（BatchCommand）
+name: migrate
+on:
+  workflow_dispatch: {}
+
+concurrency: { group: migrate, cancel-in-progress: false }
+
+permissions: { contents: read }
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production   # Settings > Environments で必須レビュアーを設定する
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17", cache: maven }
+      - run: ./mvnw -B -q -DskipTests package
+        working-directory: backend
+      - run: java -jar target/batch.jar --run-id=${{ github.run_id }}
+        working-directory: backend
+        env:
+          RUN_MIGRATIONS: "true"
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          # 起動時に組み立てる部品（暗号鍵の長さ検査など）のために渡す。マイグレーションでは使わない
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TOKEN_ENC_KEY_V1: ${{ secrets.TOKEN_ENC_KEY_V1 }}

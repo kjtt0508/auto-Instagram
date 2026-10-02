@@ -1,0 +1,51 @@
+language: kotlin
+domain_forbidden_imports:
+  - '^org\.springframework\.'
+  - '^(jakarta|javax)\.persistence\.'
+  - '^com\.fasterxml\.jackson\.'
+  - '^io\.ktor\.'
+  - '^org\.jetbrains\.exposed\.'
+rules:
+  - id: kotlin.var-property
+    principle: P06
+    severity: error
+    layers: [domain]
+    member_of: '\b(class|object)\b'
+    pattern: '^\s*((private|protected|internal|public|override|lateinit|open)\s+)*var\s+\w+'
+    message: プロパティは val に（不変）。変更は新しいインスタンスを返す（copy）
+  - id: kotlin.var-ctor
+    principle: P06
+    severity: error
+    layers: [domain]
+    pattern: '\bclass\s+\w+[^{]*\([^)]*\bvar\s'
+    message: コンストラクタの var プロパティ禁止。val にする
+  - id: kotlin.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '\bset\s*\(\s*\w+\s*\)\s*[{=]|\bfun\s+set[A-Z]'
+    message: setter 禁止。業務の言葉のメソッドで新しい値を返す
+  - id: kotlin.return-null
+    principle: P13
+    severity: error
+    layers: [domain]
+    pattern: '\breturn\s+null\b'
+    message: null を返さない。sealed class 等で『未設定』を表す
+  - id: kotlin.not-null-assert
+    principle: P13
+    severity: warn
+    pattern: '!!'
+    message: '!! は契約が型で表現されていない兆候'
+  - id: kotlin.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    exclude_file_if: '\benum\s+class\b'
+    pattern: '\bwhen\s*\(\s*\w+(\.\w+)*\s*\)\s*\{'
+    message: 区分による分岐。振る舞いを enum 側に移せないか
+  - id: kotlin.top-level-fun
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '^fun\s+(?!<)(?!.*\.\w+\s*\()(?!of\b|from\b|create)\w+\s*\('
+    message: トップレベル関数に業務ロジック。処理するデータを持つクラスのメソッド（または拡張関数ではなくメンバ）にする

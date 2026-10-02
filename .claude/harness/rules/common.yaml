@@ -1,0 +1,85 @@
+# 全言語共通ルール（languages を指定すると対象を絞れる）
+language: common
+rules:
+  - id: common.app-calculation
+    principle: P04
+    severity: warn
+    layers: [application]
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '\.(multiply|divide|subtract)\(|[\w)\]]\s*[*/%]\s*[\w(]'
+    unless_line: '^\s*(import|from|using|use|package|#|\*)'
+    message: アプリケーション層で計算している可能性。計算・判断はデータを持つドメインオブジェクトへ
+  - id: common.todo-null-object
+    principle: P13
+    severity: warn
+    layers: [domain]
+    languages: [java, kotlin, typescript, csharp, php]
+    pattern: '[=!]==?\s*null\b|\bnull\s*[=!]==?'
+    count_over: getter_warn
+    message: null 比較が多い（{count} 箇所）。『未設定』を型で表せないか
+  # ---- 1章 ----
+  - id: common.abbreviation
+    principle: P01
+    severity: warn
+    layers: [domain, application]
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '\b(qty|amt|cnt|tmp|flg|kbn|cd|nm|dt|mgr|idx)\b|\b[a-z]\w*(Qty|Amt|Cnt|Flg|Kbn|Cd|Nm|Tmp)\b'
+    max_hits: 3
+    message: 省略した名前。業務の言葉を省略せずに使う（qty → quantity、kbn → 区分の業務名）
+  - id: common.single-letter
+    principle: P01
+    severity: warn
+    layers: [domain, application]
+    pattern: '\b(int|long|double|float|String|boolean|var|let|const|val|decimal|string)\s+[a-z]\s*[=:;]|^\s*[a-z]\s*(:=|=)\s*[^=]'
+    unless_line: '\bfor\b|\bforeach\b|=>|->|\blambda\b'
+    max_hits: 3
+    message: 1文字の変数名。何を表すかを業務の言葉で名付ける
+  - id: common.magic-number
+    principle: P02
+    severity: warn
+    layers: [domain, application]
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '(?<![\w.$#])\d{2,}(?:\.\d+)?(?![\w.])'
+    unless_line: '\b(final|const|readonly|static|enum|case|version|Version|port)\b|^\s*(export\s+)?[A-Z][A-Z0-9_]*\s*[:=(]|^\s*@|^\s*#\['
+    max_hits: 3
+    message: 意味のある数値がそのまま書かれている（送料 500 など）。名前の付いた定数か値オブジェクトにする
+  # ---- 2章 ----
+  - id: common.else
+    principle: P26
+    severity: warn
+    layers: [domain, application]
+    pattern: '\belse\b'
+    unless_line: 'else\s*->|^(?!\s*(\}\s*)?(if|elif|else)\b).*\S\s+if\s.+\selse\s'   # Kotlin の when / Python の条件式は対象外
+    message: else 句。条件を満たしたら早期リターン（ガード節）にして else をなくせないか
+  - id: common.compound-condition
+    principle: P26
+    severity: warn
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '\b(if|elif|elsif|unless|while)\b.*(&&.*\|\||\|\|.*&&|\band\b.*\bor\b|\bor\b.*\band\b|((&&|\|\||\band\b|\bor\b).*){3,})'
+    message: 複文の条件。名前の付いた判断メソッド（isChild() など）の単文に分ける
+  # ---- 6章 ----
+  - id: common.sql-update
+    principle: P18
+    severity: warn
+    target: raw
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '\bUPDATE\s+[\w."`\[\]]+\s+SET\b|\bDELETE\s+FROM\b'
+    message: UPDATE/DELETE で記録を書き換えている。事実（コト）を追記し、状態はそこから導出できないか
+  # ---- 7章 ----
+  - id: common.ui-calculation
+    principle: P32
+    severity: warn
+    layers: [presentation]
+    languages: [java, kotlin, typescript, python, go, csharp, php, ruby]
+    pattern: '\.(multiply|divide|subtract)\(|[\w)\]]\s*[*%]\s*[\w(]|\b\w+\s+/\s+\w+\b'
+    unless_line: '^\s*(import|from|using|use|package|#|\*)'
+    max_hits: 3
+    message: 画面（プレゼンテーション）で計算している。業務の計算はドメインオブジェクトのメソッドに
+  - id: common.ui-status-branch
+    principle: P32
+    severity: warn
+    layers: [presentation]
+    target: raw
+    languages: [typescript, java, kotlin, csharp, php, python, ruby, go]
+    pattern: '[=!]==?\s*[''"][A-Z][A-Z0-9_]{2,}[''"]|[''"][A-Z][A-Z0-9_]{2,}[''"]\s*[=!]==?'
+    message: 画面で状態コードを直接比較している。状態ごとの見せ方（ラベル・CSS クラス・操作可否）はドメイン（状態オブジェクト）に持たせる

@@ -1,0 +1,50 @@
+language: python
+domain_forbidden_imports:
+  - '^(django|flask|fastapi|starlette|sqlalchemy|sqlmodel|peewee|tortoise|mongoengine)(\.|$)'
+  - '^(requests|httpx|aiohttp|boto3|botocore|redis|psycopg2?|pymysql)(\.|$)'
+  - '^pydantic(\.|$)'
+rules:
+  - id: python.dataclass-not-frozen
+    principle: P06
+    severity: error
+    layers: [domain]
+    pattern: '^\s*@(dataclasses\.)?dataclass\b(?!\(.*frozen\s*=\s*True)'
+    message: dataclass は frozen=True に（不変）。変更は dataclasses.replace で新しい値を返す
+  - id: python.self-mutation
+    principle: P06
+    severity: error
+    layers: [domain]
+    pattern: '^\s*self\.\w+\s*(=|\+=|-=)'
+    outside_funcs: [__init__, __post_init__, __new__, __setattr__]
+    message: '生成後に属性を書き換えている。新しいインスタンスを返す（例外は harness-allow: P06 ADR-xxxx）'
+  - id: python.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '^\s*@\w+\.setter\b|^\s*def\s+set_\w+\s*\('
+    message: setter 禁止。業務の言葉のメソッドにする
+  - id: python.return-none
+    principle: P13
+    severity: warn
+    layers: [domain]
+    pattern: '^\s*return\s+None\s*$'
+    message: None を返している。『該当なし』を表す型や例外で契約を明示できないか
+  - id: python.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [domain, application, presentation]
+    exclude_file_if: '\((str,\s*)?(Enum|StrEnum|IntEnum)\)'
+    pattern: '^\s*(if|elif)\s+.*==\s*\w+\.[A-Z][A-Z0-9_]+\b|^\s*match\s+[\w.]+\s*:'
+    message: 区分による分岐。振る舞いを Enum 側に持たせられないか
+  - id: python.dict-domain
+    principle: P05
+    severity: warn
+    layers: [domain]
+    pattern: '->\s*(dict|Dict)\b|:\s*(dict|Dict)\[str,\s*Any\]'
+    message: dict で業務データを表している。値オブジェクトにできないか
+  - id: python.staticmethod
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '^\s*@staticmethod\b'
+    message: インスタンス変数を使わないメソッド。データを持つクラスへ移すか、ファクトリなら @classmethod で of/from と命名

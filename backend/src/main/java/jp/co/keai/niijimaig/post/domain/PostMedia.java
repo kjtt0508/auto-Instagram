@@ -1,0 +1,74 @@
+package jp.co.keai.niijimaig.post.domain;
+
+/** 投稿画像: 投稿に含まれる1枚の画像（順番・保存先・幅・高さ・容量） */
+public final class PostMedia {
+
+	private final int position;
+	private final String storagePath;
+	private final int width;
+	private final int height;
+	private final long bytes;
+
+	public PostMedia(int position, String storagePath, int width, int height, long bytes) {
+		if (position < 1) {
+			throw new IllegalArgumentException("順番は1以上: " + position);
+		}
+		if (storagePath == null || storagePath.isBlank()) {
+			throw new IllegalArgumentException("保存先は必須");
+		}
+		if (width <= 0 || height <= 0 || bytes <= 0) {
+			throw new IllegalArgumentException("幅・高さ・容量は正の数");
+		}
+		this.position = position;
+		this.storagePath = storagePath;
+		this.width = width;
+		this.height = height;
+		this.bytes = bytes;
+	}
+
+	/** 同じ画像を別の保存先に複製したもの */
+	public PostMedia copiedTo(String newStoragePath) {
+		return new PostMedia(position, newStoragePath, width, height, bytes);
+	}
+
+	public int width() {
+		return width;
+	}
+
+	public int height() {
+		return height;
+	}
+
+	public long bytes() {
+		return bytes;
+	}
+
+	public double aspectRatio() {
+		return (double) width / height;
+	}
+
+	public int position() {
+		return position;
+	}
+
+	public String storagePath() {
+		return storagePath;
+	}
+
+	boolean widthWithin(int min, int max) {
+		return width >= min && width <= max;
+	}
+
+	boolean bytesAtMost(long max) {
+		return bytes <= max;
+	}
+
+	boolean aspectWithin(double min, double max) {
+		double aspect = aspectRatio();
+		return aspect >= min && aspect <= max;
+	}
+
+	boolean sameAspectAs(PostMedia other) {
+		return Math.abs(aspectRatio() - other.aspectRatio()) < 0.01;
+	}
+}

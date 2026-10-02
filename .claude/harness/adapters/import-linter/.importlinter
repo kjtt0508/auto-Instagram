@@ -1,0 +1,22 @@
+# [任意アダプタ] Python: pip install import-linter → lint-imports
+# root_package をプロジェクトのトップレベルパッケージに置換
+[importlinter]
+root_package = myapp
+
+[importlinter:contract:layers]
+name = レイヤの依存方向（P16）
+type = layers
+layers =
+    myapp.presentation
+    myapp.application
+    myapp.domain
+
+[importlinter:contract:domain-purity]
+name = ドメインは技術的関心事に依存しない（P16）
+type = forbidden
+source_modules = myapp.domain
+forbidden_modules =
+    django
+    fastapi
+    sqlalchemy
+    requests

@@ -1,0 +1,50 @@
+language: go
+domain_forbidden_imports:
+  - '^net/http$'
+  - '^database/sql'
+  - '^(gorm\.io/|github\.com/(gin-gonic|labstack/echo|gofiber|go-chi|jmoiron/sqlx|jackc/pgx|go-redis|aws/aws-sdk-go))'
+rules:
+  - id: go.setter
+    principle: P12
+    severity: error
+    layers: [domain]
+    pattern: '^func\s+\(\w+\s+\*\w+\)\s+Set[A-Z]\w*\s*\('
+    message: setter 禁止。業務の言葉のメソッドで新しい値を返す
+  - id: go.exported-field
+    principle: P12
+    severity: error
+    layers: [domain]
+    member_of: '\bstruct\b'
+    pattern: '^\s+[A-Z]\w*(\s*,\s*[A-Z]\w*)*\s+[\w.*\[\]]+'
+    message: 公開フィールド禁止。非公開フィールド + コンストラクタ関数(New...)で不変条件を守る
+  - id: go.struct-tags
+    principle: P16
+    severity: warn
+    layers: [domain]
+    target: raw
+    pattern: '`[^`]*\b(json|db|gorm|bson):"'
+    message: ドメインの構造体にシリアライズ/永続化タグ。変換は外側の層で
+  - id: go.pointer-receiver
+    principle: P06
+    severity: warn
+    layers: [domain]
+    pattern: '^func\s+\(\w+\s+\*\w+\)'
+    message: ポインタレシーバは状態変更の兆候。値レシーバで新しい値を返せないか
+  - id: go.nil-nil
+    principle: P13
+    severity: error
+    layers: [domain]
+    pattern: '\breturn\s+nil\s*,\s*nil\b'
+    message: (nil, nil) は『無い』と『失敗』の区別を失う。ErrNotFound 等を返す
+  - id: go.kubun-branch
+    principle: P09
+    severity: warn
+    layers: [application, presentation]
+    pattern: '^\s*switch\s+\w+(\.\w+)+\s*\{'
+    message: 区分による分岐。振る舞いを区分型のメソッドに持たせられないか
+  - id: go.func-on-domain-type
+    principle: P27
+    severity: warn
+    layers: [domain]
+    pattern: '^func\s+(?!New)[A-Z]\w*\s*\(\s*\w+\s+\*?[A-Z]\w*[,)]'
+    message: ドメイン型を第1引数に取る関数。その型のメソッドにできないか（データとロジックを一緒に）
