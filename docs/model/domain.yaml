@@ -364,6 +364,8 @@ terms:
       - {code: LLM_LIMIT_REACHED, name_ja: 生成上限に到達}
       - {code: PUBLISH_FAILED, name_ja: 投稿失敗あり}
       - {code: BATCH_STOPPED, name_ja: 定期処理が止まっている}
+      - {code: IMAGE_LIMIT_NEAR, name_ja: 画像生成の上限が近い}
+      - {code: IMAGE_LIMIT_REACHED, name_ja: 画像生成の上限に到達}
     behaviors:
       - 重要度（エラー／注意）を返す
       - 表示文言と対処リンクを返す
@@ -414,8 +416,9 @@ terms:
     code_name: Generation
     kind: event
     category: koto
-    definition: LLMに下書き案を作らせた1回の出来事。入力・出力・プロンプト版・生成経路・その後の承認／修正の結果を残す
+    definition: LLMに下書き案を作らせた1回の出来事。入力・出力・プロンプト版・生成経路・その後の承認／修正の結果を残す。画像を作る出来事は「画像生成」で、これとは別（画像生成の指示の英訳もこれには含めない）
     identity: 生成ID
+    avoid: [画像の生成（→ 画像生成）]
     promises:
       do:
         - 入力と出力をそのまま残し、品質改善と分析に使えるようにする
@@ -641,3 +644,132 @@ terms:
     definition: 企画生成で「良い例」として渡す過去の投稿。直近90日の公開済み投稿のうち、リーチあたり保存数の上位（要確認）
     behaviors:
       - 公開済み投稿とインサイトから上位N件を選ぶ
+
+  # ───────── AI 画像生成（REQ-005） ─────────
+  - name_ja: 画像生成
+    code_name: ImageGeneration
+    kind: event
+    category: koto
+    definition: 画像生成の指示から、画像生成の提供元に候補を作らせた1回の出来事。LLM に下書き案を作らせる「生成」とは別
+    identity: 画像生成ID
+    promises:
+      do:
+        - 指示・英訳した指示・画像の種類・提供元とモデル名・結果（成功／失敗）・作った候補の数・依頼したメンバー・日時を残す
+        - 個人情報を含む指示は提供元に送らず、記録もしない
+      dont:
+        - 作った画像が事実を写していることの保証（写真風はイメージ写真としてだけ使う）
+        - 採用されなかった候補の画像を残すこと
+    invariants:
+      - 1回の画像生成で作る候補は最大4枚（0枚なら結果は失敗）
+    behaviors:
+      - 候補を作る（成功）／失敗する
+    related: [画像生成の指示, 画像の種類, 候補, 画像生成の提供元, 画像生成の回数]
+    avoid: [AI画像生成ログ, ImageGenerationInfo]
+
+  - name_ja: 画像生成の指示
+    code_name: ImagePrompt
+    kind: value
+    definition: 画像生成で作ってほしい画像を言葉で表したもの（日本語）。提供元へは英訳して渡す
+    invariants:
+      - 1〜500文字
+      - メールアドレス・電話番号の形式を含まない
+      - その投稿の元になった PR入稿の入稿者連絡先を含まない
+    behaviors:
+      - 個人を特定できる情報を含むか判断する
+    related: [画像生成, 入稿者連絡先]
+    avoid: [プロンプト（LLM のプロンプト版と紛らわしい）]
+
+  - name_ja: 画像の種類
+    code_name: ImageStyle
+    kind: kubun
+    definition: 画像生成で作る画像の見た目の種類。種類ごとに開示と確認の扱いが変わる
+    values:
+      - {code: ILLUSTRATION, name_ja: 背景・イラスト}
+      - {code: PHOTOREALISTIC, name_ja: 写真風}
+    behaviors:
+      - 生成時に注意書きを出すか（写真風のみ）
+      - 承認時に確認表示を出すか（写真風のみ）
+      - 公開時にAI生成の表示を付けるか（写真風のみ）
+      - Instagram の AI info（is_ai_generated）を付けるか（写真風のみ）
+    related: [生成画像, AI生成の表示]
+
+  - name_ja: 候補
+    code_name: ImageCandidate
+    kind: value
+    definition: 画像生成で作られ、まだ採用されていない画像。採用されなければ残さない
+    invariants:
+      - どの画像生成の何番目の候補かを持つ（1〜4）
+    behaviors:
+      - 採用されて生成画像になる
+    related: [画像生成, 候補の採用, 生成画像]
+
+  - name_ja: 候補の採用
+    code_name: CandidateAdoption
+    kind: event
+    category: koto
+    definition: 人が候補を選んで投稿の投稿画像にした出来事。画像生成とは別の時点に起きる
+    identity: 候補の採用ID
+    promises:
+      do:
+        - どの画像生成のどの候補を、どの投稿に、誰がいつ採用したかを残す
+      dont:
+        - 採用を取り消したことの記録（投稿画像から外すのは投稿の版の変更で表す）
+    related: [候補, 生成画像, 投稿, メンバー]
+
+  - name_ja: 生成画像
+    code_name: GeneratedImage
+    kind: value
+    definition: 採用されて投稿画像になった候補。画像の種類を持つ。投稿画像としては画像仕様を満たす
+    invariants:
+      - 画像の種類を持つ
+      - 採用した候補の画像生成を辿れる
+    behaviors:
+      - AI生成の表示が必要かを返す（画像の種類に委ねる）
+    related: [投稿画像, 画像の種類, 候補の採用]
+    avoid: [AI画像, AI写真]
+
+  - name_ja: AI生成の表示
+    code_name: AiDisclosure
+    kind: rule
+    definition: 写真風の生成画像を含む投稿を公開するときに付ける開示。キャプション末尾の定型文と、Instagram の AI info
+    invariants:
+      - 定型文は「※画像はAIで生成したイメージです」。本文の末尾に改行1つを挟んで付ける（改行込み18文字）
+      - 付けた後も公開用キャプションは PR表記を含めて2,200文字以下
+    behaviors:
+      - 投稿に付けるべきか判断する（写真風の生成画像を1枚でも含むとき）
+      - 公開用キャプションに定型文を付ける
+    related: [生成画像, 画像の種類, キャプション, PR区分]
+
+  - name_ja: 画像生成の回数
+    code_name: ImageGenerationUsage
+    kind: aggregate
+    category: koto
+    definition: 団体・日（日本時間 9:00 から翌 9:00）ごとの画像生成の回数。候補4枚を作る1回を1回と数える。無料枠の範囲で使うために数える
+    identity: 団体ID＋日（日本時間 9:00 区切り）
+    promises:
+      do:
+        - 画像生成の前に1回分を確保し、上限を超える画像生成をさせない
+      dont:
+        - 提供元側の実際の残量との一致（自前で控えめに数える）
+    behaviors:
+      - 1回分を確保する（上限到達なら拒否）
+      - 上限に近いか判断する（8割）
+    related: [画像生成の上限, 画像生成, 団体]
+
+  - name_ja: 画像生成の上限
+    code_name: ImageGenerationQuota
+    kind: value
+    definition: 1日に画像生成してよい回数と、警告を出す割合（団体の設定値）
+    invariants:
+      - 上限は1以上（仮置き20）
+      - 警告割合は0より大きく1以下（既定0.8）
+    related: [画像生成の回数]
+
+  - name_ja: 画像生成の提供元
+    code_name: ImageGenerator
+    kind: value
+    definition: 画像を作る外部サービスとモデル名の組（団体の設定値）。LLM の提供元・モデルとは別に設定する
+    invariants:
+      - 提供元とモデル名は空でない
+    related: [画像生成, 団体]
+    avoid: [提供元（LLM と紛らわしい）]
