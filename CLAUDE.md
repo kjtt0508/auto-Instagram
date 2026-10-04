@@ -49,4 +49,8 @@
 - `domain-modeler` 要件の言葉からモデルを抽出・整理
 - `design-reviewer` 原則に基づく独立レビュー（読み取り専用）。各工程の終わりに必ず通す
 - `test-designer` 受入基準・非機能要件・業務ルールからテストを設計
+- `implementer` 承認済みの要件・設計に沿ってコードとテストを書く（工程04・05）
 - `design-coach` 指摘の意味を実コードの Before/After で説明（教育用・読み取り専用）
+
+モデルの使い分け（2026-10-05 梶原）: **実装・テストは Sonnet**（`implementer` / `test-designer`）、**レビューは Opus**（`design-reviewer`）。
+親（メインのセッション）は要件・用語集・設計・統合・コミットを担い、実装は `implementer` に任せ、各工程の終わりに `design-reviewer` を通す。
