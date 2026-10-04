@@ -13,10 +13,17 @@ export class SupabaseService {
     const user = await this.http(`${this.config.url}/auth/v1/user`, {
       headers: { apikey: this.config.serviceRoleKey, Authorization: `Bearer ${accessToken}` },
     });
-    if (!user.ok) return null;
+    if (!user.ok) {
+      // 鍵の値は出さない。設定の取り違えに気づけるよう、接続先のホスト・鍵の種類と長さ・Supabase の文言だけを出す
+      const reason = ((await user.json().catch(() => ({}))) as { msg?: string; message?: string });
+      console.warn(`メンバーの確認: アクセストークンを確かめられません（auth ${user.status} ${reason.msg ?? reason.message ?? ""}）`
+        + ` host=${new URL(this.config.url).host} key=${this.keyKind()}`);
+      return null;
+    }
     const { id } = (await user.json()) as { id: string };
     const rows = await this.rest<{ member_id: string; tenant_id: string; role: string }[]>(
       `member_current?select=member_id,tenant_id,role&active=is.true&auth_user_id=eq.${encodeURIComponent(id)}`);
+    if (!rows[0]) console.warn("メンバーの確認: ログインした利用者に、有効なメンバーが結び付いていません");
     return rows[0] ? { memberId: rows[0].member_id, tenantId: rows[0].tenant_id, roleCode: rows[0].role } : null;
   }
 
@@ -48,6 +55,13 @@ export class SupabaseService {
     const response = await this.http(`${this.config.url}/storage/v1/object/${BUCKET}`, {
       method: "DELETE", body: JSON.stringify({ prefixes: paths }), headers: { ...this.authHeaders(), "Content-Type": "application/json" } });
     if (!response.ok) throw new Error(`Storage からの削除に失敗しました（${response.status}）`);
+  }
+
+  /** 鍵の種類と長さ（値そのものは出さない） */
+  private keyKind(): string {
+    const key = this.config.serviceRoleKey;
+    const kind = key.startsWith("sb_secret_") ? "sb_secret" : key.startsWith("eyJ") ? "jwt" : "unknown";
+    return `${kind}/${key.length}${key.trim() !== key ? "/空白あり" : ""}`;
   }
 
   private authHeaders(): Record<string, string> {
