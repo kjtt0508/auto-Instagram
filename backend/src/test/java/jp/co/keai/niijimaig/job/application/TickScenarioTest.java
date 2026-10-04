@@ -275,20 +275,26 @@ class TickScenarioTest {
 	@DisplayName("AC-005-13 daily は画像生成から24時間を過ぎた候補の画像を消し、画像生成の記録は残す。24時間以内の候補は消さない")
 	void dailyDeletesAbandonedCandidates() {
 		UUID old = UUID.randomUUID();
+		UUID oldFailed = UUID.randomUUID();
 		UUID fresh = UUID.randomUUID();
 		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '桜並木', "
 				+ "'cherry blossoms', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 3)", old, tenant, editor.memberId()));
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '山', "
+				+ "'mountain', 'CLOUDFLARE_WORKERS_AI', 'flux', 'FAILED', 0)", oldFailed, tenant, editor.memberId()));
 		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '海', "
 				+ "'sea', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 4)", fresh, tenant, editor.memberId()));
 		jdbc.execute("alter table image_generations disable trigger user");
-		jdbc.update("update image_generations set requested_at = now() - interval '25 hours' where id = ?", old);
+		jdbc.update("update image_generations set requested_at = now() - interval '25 hours' where id in (?, ?)", old, oldFailed);
 		jdbc.execute("alter table image_generations enable trigger user");
 		candidateStorage.deleted.clear();
 
 		daily.run("daily-3");
 
+		// 候補の数・結果を問わず位置 1〜4 を消す（保存の途中で失敗した画像も残さない）
 		assertThat(candidateStorage.deleted).filteredOn(c -> c.generationId().equals(old))
-				.extracting(c -> c.position()).containsExactly(1, 2, 3);
+				.extracting(c -> c.position()).containsExactly(1, 2, 3, 4);
+		assertThat(candidateStorage.deleted).filteredOn(c -> c.generationId().equals(oldFailed))
+				.extracting(c -> c.position()).containsExactly(1, 2, 3, 4);
 		assertThat(candidateStorage.deleted).noneMatch(c -> c.generationId().equals(fresh));
 		assertThat(jdbc.queryForObject("select count(*) from image_generations where id = ?", Integer.class, old)).isEqualTo(1);
 	}

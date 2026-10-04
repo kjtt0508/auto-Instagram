@@ -14,7 +14,7 @@ public final class CandidateImages {
 	/** 画像生成の記録から候補を辿る */
 	public interface Records {
 
-		/** since 以降に成功した画像生成の候補（全団体）。消したかどうかは問わない（消すのは何度でもよい） */
+		/** since 以降の画像生成の候補の位置（全団体・結果を問わず 1〜4）。消したかどうかは問わない（消すのは何度でもよい） */
 		List<ImageCandidate> generatedSince(Instant since);
 	}
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ImageGenerationQuota } from "../../src/domain/image/ImageGenerationQuota";
 import { ImageGenerator } from "../../src/domain/image/ImageGenerator";
 import { ImageGenerating } from "../image/application/imageGenerating";
@@ -18,6 +18,7 @@ type World = {
   ai?: "ok" | "error" | "partial"; model?: string;
   uploadFails?: number; // 候補の保存を最初の何回か失敗させる
   recordFails?: boolean;
+  authStatus?: number; // Supabase Auth がアクセストークンの確認に失敗したときの状態コード
 };
 
 function fakes(world: World = {}) {
@@ -27,7 +28,7 @@ function fakes(world: World = {}) {
   const http = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const body = init?.body && typeof init.body === "string" ? JSON.parse(init.body) : undefined;
-    if (url.endsWith("/auth/v1/user")) return json({ id: "user-1" });
+    if (url.endsWith("/auth/v1/user")) return world.authStatus ? json({ msg: "Invalid API key" }, world.authStatus) : json({ id: "user-1" });
     if (url.includes("/rest/v1/member_current")) return json(world.role === "NONE" ? [] : [{ member_id: "m1", tenant_id: "t1", role: world.role ?? "EDITOR" }]);
     if (url.includes("image_generation_settings_current")) return json([{ provider: "CLOUDFLARE_WORKERS_AI", model: world.model ?? "@cf/flux", daily_limit: 20, warn_ratio: 0.8 }]);
     if (url.includes("tenant_settings_current")) return json([{ llm_model: "gemini-test", llm_daily_limit: 200 }]);
@@ -168,6 +169,36 @@ describe("POST /api/image-generations", () => {
     expect((await generate(f)).status).toBe(500);
     const deleted = f.calls.find((c) => c.kind === "delete")!.body as { prefixes: string[] };
     expect(deleted.prefixes).toEqual([1, 2, 3, 4].map((p) => `t1/candidates/gen-1/${p}.jpg`));
+  });
+
+  it("AC-005-03 個人情報を含む指示は 400 で、Gemini も提供元も呼ばず、回数も記録も増えない", async () => {
+    const f = fakes();
+    const response = await generate(f, "連絡先 ０９０－１２３４－５６７８ の看板");
+    expect(response.status).toBe(400);
+    expect(f.kinds()).toEqual([]);
+  });
+
+  it("NFR-005-01 アクセストークンを確かめられないときは 403。ログに理由は出すが、鍵の値は出さない", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect((await generate(fakes({ authStatus: 401 }))).status).toBe(403);
+      const logged = warn.mock.calls.flat().join("\n");
+      expect(logged).toContain("auth 401 Invalid API key");
+      expect(logged).toContain(`key=unknown/${SERVICE_KEY.length}`);
+      expect(logged).not.toContain(SERVICE_KEY);
+      expect(logged).not.toContain("jwt");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("Supabase Auth 自体の失敗（5xx）は権限の問題に見せず 500 にする", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect((await generate(fakes({ authStatus: 503 }))).status).toBe(500);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("AC-005-15 編集者も管理者も画像生成できる。メンバーでなければ 403", async () => {

@@ -11,6 +11,14 @@ import {
 const TRANSLATION_TIMEOUT_MS = 15_000;
 const TOTAL_TIMEOUT_MS = 60_000;
 
+/**
+ * 縮退した失敗の理由をログに残す（利用者には 502/503 しか見えないため。鍵の取り違え・モデル名の誤り・無料枠切れを追えるように）。
+ * infrastructure の例外の文言は状態コードだけにしてあるので、鍵は含まれない
+ */
+function warn(what: string, e: unknown): void {
+  console.warn(`[image-generation] ${what}: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
+}
+
 export type GeneratedCandidates = {
   generationId: string;
   candidates: { position: number; url: string }[];
@@ -65,7 +73,8 @@ export class ImageGenerating {
   private async translate(member: RequestingMember, prompt: ImagePrompt, settings: GenerationSettings): Promise<string> {
     const unavailable = new ImageGenerationRefusal("TRANSLATION_UNAVAILABLE", "いまは画像を作れません。写真を撮る・選ぶで続けてください");
     if (!(await this.deps.records.tryConsumeLlm(member.tenantId, settings.llmModel, settings.llmDailyLimit))) throw unavailable;
-    const translated = await this.deps.translator.toEnglish(prompt, settings.llmModel, TRANSLATION_TIMEOUT_MS).catch(() => "");
+    const translated = await this.deps.translator.toEnglish(prompt, settings.llmModel, TRANSLATION_TIMEOUT_MS)
+      .catch((e: unknown) => { warn("英訳できなかった", e); return ""; });
     if (translated.trim() === "") throw unavailable;
     return translated;
   }
@@ -82,14 +91,20 @@ export class ImageGenerating {
     const results = await Promise.allSettled(Array.from({ length: ImageGeneration.CANDIDATES_PER_GENERATION },
       () => Promise.race([this.deps.images.generate(settings.generator, prompt), deadline])));
     clearTimeout(timer);
-    const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    results.forEach((r) => { if (r.status === "rejected") warn("候補を作れなかった", r.reason); });
+    const urls = await this.saveCandidates(member, id, results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
+    return { urls, timedOut: timedOut && urls.length === 0 };
+  }
+
+  /** 保存できなかった画像は候補にしない（位置は保存できた順に 1 から詰める。途中まで保存された画像は daily が位置 1〜4 を消す） */
+  private async saveCandidates(member: RequestingMember, id: string, images: Uint8Array[]): Promise<string[]> {
     const urls: string[] = [];
     for (const jpeg of images) {
-      // 保存できなかった画像は候補にしない（位置は保存できた順に 1 から詰める）
-      const url = await this.deps.records.saveCandidate(member.tenantId, id, urls.length + 1, jpeg).catch(() => null);
+      const url = await this.deps.records.saveCandidate(member.tenantId, id, urls.length + 1, jpeg)
+        .catch((e: unknown) => { warn("候補を保存できなかった", e); return null; });
       if (url) urls.push(url);
     }
-    return { urls, timedOut: timedOut && urls.length === 0 };
+    return urls;
   }
 
   /** ⑥記録できなければ、保存した候補を消してから失敗にする（記録の無い候補は daily が辿れない） */
@@ -98,7 +113,7 @@ export class ImageGenerating {
       await this.deps.records.record(member, generation, settings.generator);
     } catch (e) {
       await this.deps.records.clearCandidates(member.tenantId, generation.id, generation.candidates().map((c) => c.position))
-        .catch(() => undefined);
+        .catch((cleanup: unknown) => warn("記録できなかった画像生成の候補を消せなかった", cleanup));
       throw e;
     }
   }

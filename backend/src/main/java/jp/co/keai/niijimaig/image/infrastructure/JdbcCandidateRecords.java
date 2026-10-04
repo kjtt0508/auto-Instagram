@@ -11,7 +11,10 @@ import org.springframework.stereotype.Repository;
 import jp.co.keai.niijimaig.image.application.CandidateImages;
 import jp.co.keai.niijimaig.image.domain.ImageCandidate;
 
-/** 成功した画像生成の記録から、候補（1〜候補の数）を辿る */
+/**
+ * 画像生成の記録から、候補の位置 1〜4 をすべて辿る。結果（成功・失敗）や候補の数は問わない
+ * （保存の途中で失敗して数えられなかった画像も消すため。無いパスを消しても害は無い）
+ */
 @Repository
 public class JdbcCandidateRecords implements CandidateImages.Records {
 
@@ -25,11 +28,11 @@ public class JdbcCandidateRecords implements CandidateImages.Records {
 	public List<ImageCandidate> generatedSince(Instant since) {
 		return jdbc.query("""
 				select g.tenant_id, g.id, p.position, g.requested_at
-				  from image_generations g cross join lateral generate_series(1, g.candidate_count) as p(position)
-				 where g.outcome = 'SUCCEEDED' and g.requested_at >= ?
+				  from image_generations g cross join generate_series(1, ?) as p(position)
+				 where g.requested_at >= ?
 				 order by g.requested_at, p.position
 				""", (rs, i) -> new ImageCandidate(rs.getObject("tenant_id", UUID.class), rs.getObject("id", UUID.class),
 						rs.getInt("position"), rs.getTimestamp("requested_at").toInstant()),
-				Timestamp.from(since));
+				ImageCandidate.MAX_POSITION, Timestamp.from(since));
 	}
 }

@@ -12,6 +12,13 @@ import { clearCandidates, generateCandidates, imageGenerationUsage } from "@/lib
 
 export type ChosenCandidate = { candidate: ImageCandidate; image: Blob };
 
+/** 候補の画像（期限付き URL は1時間。切れていたら作り直してもらう） */
+async function candidateImage(url: string): Promise<Blob> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("候補の期限が切れました。作り直してください");
+  return response.blob();
+}
+
 /**
  * S-13 画像を生成する（REQ-005 設計 3章）: ①画像の種類 ②指示 ③今日の残り回数 ④生成 ⑤候補（2×2、複数選べる）⑥選んだ画像を使う。
  * 閉じるときは候補を片付ける（失敗しても daily が消す）
@@ -59,7 +66,7 @@ export function ImageGenerationSheet({ maxChoices, onChoose, onClose }: {
     try {
       const chosen = await Promise.all(selected.map(async (position) => ({
         candidate: ImageCandidate.of({ generationId: result.generationId, position, style: result.style }),
-        image: await (await fetch(result.candidates.find((c) => c.position === position)!.url)).blob(),
+        image: await candidateImage(result.candidates.find((c) => c.position === position)!.url),
       })));
       await onChoose(chosen);
       await clearCandidates(result.generationId);

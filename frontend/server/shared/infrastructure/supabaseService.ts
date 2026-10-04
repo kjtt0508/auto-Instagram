@@ -4,6 +4,9 @@ export type SupabaseConfig = { url: string; serviceRoleKey: string };
 export type ServiceMember = { memberId: string; tenantId: string; roleCode: string };
 
 const BUCKET = "uploads-private";
+const UNAUTHORIZED = 401;
+const FORBIDDEN = 403;
+const REASON_MAX_LENGTH = 120;
 
 export class SupabaseService {
   constructor(private readonly config: SupabaseConfig, private readonly http: typeof fetch = (input, init) => fetch(input, init)) {}
@@ -14,11 +17,14 @@ export class SupabaseService {
       headers: { apikey: this.config.serviceRoleKey, Authorization: `Bearer ${accessToken}` },
     });
     if (!user.ok) {
-      // 鍵の値は出さない。設定の取り違えに気づけるよう、接続先のホスト・鍵の種類と長さ・Supabase の文言だけを出す
-      const reason = ((await user.json().catch(() => ({}))) as { msg?: string; message?: string });
-      console.warn(`メンバーの確認: アクセストークンを確かめられません（auth ${user.status} ${reason.msg ?? reason.message ?? ""}）`
+      // 鍵の値は出さない。設定の取り違えに気づけるよう、接続先のホスト・鍵の種類と長さ・Supabase の文言（短く切る）だけを出す
+      const reason = ((await user.json().catch(() => null)) ?? {}) as { msg?: string; message?: string };
+      const text = String(reason.msg ?? reason.message ?? "").slice(0, REASON_MAX_LENGTH);
+      console.warn(`メンバーの確認: アクセストークンを確かめられません（auth ${user.status} ${text}）`
         + ` host=${new URL(this.config.url).host} key=${this.keyKind()}`);
-      return null;
+      // 401/403 は「メンバーでない」。それ以外（5xx など）は Supabase 側の失敗で、権限の問題に見せない
+      if (user.status === UNAUTHORIZED || user.status === FORBIDDEN) return null;
+      throw new Error(`Supabase Auth がエラーを返しました（${user.status}）`);
     }
     const { id } = (await user.json()) as { id: string };
     const rows = await this.rest<{ member_id: string; tenant_id: string; role: string }[]>(

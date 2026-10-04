@@ -12,7 +12,8 @@ public record ImageCandidate(UUID tenantId, UUID generationId, int position, Ins
 
 	/** 画像生成からこの時間を過ぎた候補は、片付けられていなくても放置とみなして消してよい（選んでいる最中の候補は消さない） */
 	public static final Duration ABANDONED_AFTER = Duration.ofHours(24);
-	static final int MAX_POSITION = 4;
+	/** 1回の画像生成で作る候補の最大数（REQ-005 BR-005-04） */
+	public static final int MAX_POSITION = 4;
 
 	public ImageCandidate {
 		if (tenantId == null || generationId == null || generatedAt == null) {
