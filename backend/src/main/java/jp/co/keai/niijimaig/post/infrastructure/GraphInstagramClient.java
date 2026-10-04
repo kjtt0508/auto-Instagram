@@ -29,6 +29,7 @@ import jp.co.keai.niijimaig.connection.domain.InstagramConnection;
 import jp.co.keai.niijimaig.connection.domain.TokenExpiry;
 import jp.co.keai.niijimaig.post.application.InstagramApiException;
 import jp.co.keai.niijimaig.post.application.InstagramPublisher;
+import jp.co.keai.niijimaig.post.domain.AiDisclosure;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.FailureKind;
 import jp.co.keai.niijimaig.post.domain.PublishResult;
@@ -63,9 +64,9 @@ public class GraphInstagramClient implements InstagramPublisher, InstagramTokenR
 	}
 
 	@Override
-	public String createImageContainer(InstagramConnection c, String imageUrl, Caption caption) {
-		return post(c, "/" + c.igUserId() + "/media", Map.of("image_url", imageUrl, "caption", caption.text()))
-				.path("id").asString();
+	public String createImageContainer(InstagramConnection c, String imageUrl, Caption caption, AiDisclosure disclosure) {
+		return post(c, "/" + c.igUserId() + "/media",
+				withAiInfo(Map.of("image_url", imageUrl, "caption", caption.text()), disclosure)).path("id").asString();
 	}
 
 	@Override
@@ -75,9 +76,19 @@ public class GraphInstagramClient implements InstagramPublisher, InstagramTokenR
 	}
 
 	@Override
-	public String createCarouselContainer(InstagramConnection c, List<String> childIds, Caption caption) {
-		return post(c, "/" + c.igUserId() + "/media", Map.of("media_type", "CAROUSEL",
-				"children", String.join(",", childIds), "caption", caption.text())).path("id").asString();
+	public String createCarouselContainer(InstagramConnection c, List<String> childIds, Caption caption, AiDisclosure disclosure) {
+		return post(c, "/" + c.igUserId() + "/media", withAiInfo(Map.of("media_type", "CAROUSEL",
+				"children", String.join(",", childIds), "caption", caption.text()), disclosure)).path("id").asString();
+	}
+
+	/** AI生成の表示が要るなら AI info（is_ai_generated=true）を足す（02_外部連携設計 1.3、REQ-005 BR-005-05） */
+	private Map<String, String> withAiInfo(Map<String, String> params, AiDisclosure disclosure) {
+		if (!disclosure.isRequired()) {
+			return params;
+		}
+		Map<String, String> withInfo = new LinkedHashMap<>(params);
+		withInfo.put("is_ai_generated", "true");
+		return withInfo;
 	}
 
 	@Override

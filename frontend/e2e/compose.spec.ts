@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { useMockSupabase } from "./supabaseMock";
 
 /** 単色の PNG（スマホで撮った写真の代わり）。幅×高さを指定する */
@@ -48,4 +48,61 @@ test("BR-001-04 写真を2枚にするとカルーセルになり、2枚目は1�
   ]);
   await expect(page.getByText("2枚目")).toBeVisible();
   await expect(page.getByText("カルーセルの投稿（2枚）")).toBeVisible();
+});
+
+/** API関数 /api/image-generations の代役。候補は 1024×1024 の画像（REQ-005 設計 4章） */
+async function useMockImageGeneration(page: Page) {
+  const calls: string[] = [];
+  await page.route("**/e2e-candidates/*.png", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: solidPng(1024, 1024) }));
+  await page.route("**/api/image-generations**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    calls.push(path);
+    if (path.endsWith("/clear")) return route.fulfill({ status: 204 });
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({
+      generationId: "g1",
+      candidates: [1, 2, 3, 4].map((position) => ({ position, url: `/e2e-candidates/${position}.png` })),
+      usage: { used: 1, dailyLimit: 20, warnRatio: 0.8 },
+    }) });
+  });
+  return calls;
+}
+
+test("AC-005-09 種類「写真風」を選ぶと、イメージ写真としてだけ使える旨の注意書きが出る", async ({ page }) => {
+  await useMockSupabase(page, { role: "EDITOR", heartbeatMinutesAgo: 5, posts: [] });
+  await page.goto("/posts/new/");
+  await page.getByRole("button", { name: "AIで作る" }).click();
+  const caution = "イメージ写真としてだけ使えます。実際の出来事・場所・人を撮ったように見せる使い方や、実在の人物・商標を求める指示はできません";
+  await expect(page.getByText(caution)).toHaveCount(0);
+  await page.getByRole("radio", { name: "写真風" }).click();
+  await expect(page.getByText(caution)).toBeVisible();
+});
+
+test("AC-005-12 AC-005-15 編集者が4枚の候補のうち2枚を採用すると、投稿画像の末尾に加わってカルーセルになり、保存で候補の採用が記録される", async ({ page }) => {
+  await useMockSupabase(page, { role: "EDITOR", heartbeatMinutesAgo: 5, posts: [] });
+  const apiCalls = await useMockImageGeneration(page);
+  const saved: unknown[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/save_post_revision")) saved.push(request.postDataJSON());
+  });
+  await page.goto("/posts/new/");
+
+  await page.getByRole("button", { name: "AIで作る" }).click();
+  await page.getByRole("textbox", { name: "作りたい画像" }).fill("桜並木のやわらかい水彩風の背景");
+  await page.getByRole("button", { name: "生成" }).click();
+  await page.getByRole("button", { name: "候補1" }).click();
+  await page.getByRole("button", { name: "候補3" }).click();
+  await page.getByRole("button", { name: "選んだ画像を使う（2）" }).click();
+
+  await expect(page.getByText("カルーセルの投稿（2枚）")).toBeVisible();
+  expect(apiCalls).toEqual(["/api/image-generations", "/api/image-generations/g1/clear"]);
+  await page.getByRole("textbox", { name: "キャプション" }).fill("春のお知らせ");
+  await page.getByRole("button", { name: "承認を依頼" }).click();
+
+  await expect.poll(() => saved.length).toBe(1);
+  const media = (saved[0] as { p_revision: { media: { position: number; generation?: unknown }[] } }).p_revision.media;
+  expect(media.map((m) => [m.position, m.generation])).toEqual([
+    [1, { generationId: "g1", candidatePosition: 1 }],
+    [2, { generationId: "g1", candidatePosition: 3 }],
+  ]);
 });

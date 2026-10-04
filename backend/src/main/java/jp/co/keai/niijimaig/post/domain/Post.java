@@ -3,6 +3,7 @@ package jp.co.keai.niijimaig.post.domain;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,22 +48,48 @@ public final class Post {
 		return new PublishingStep.Start(PostEvent.of(Kind.PUBLISH_STARTED, status, PostStatus.PUBLISHING));
 	}
 
-	/** 公開してよい内容か。公開用キャプション（PR表記込み）と画像を検査し、理由を列挙する */
+	/** 公開してよい内容か。公開用キャプション（PR表記・AI生成の表示込み）と画像を検査し、理由を列挙する */
 	public List<String> violationsForPublishing(PostMediaList prepared, ImageSpec spec, String prLabel) {
 		List<String> violations = new ArrayList<>(content.media().violationsFor(content.format(), spec));
 		if (prepared.count() != content.media().count()) {
 			violations.add("公開用画像の枚数が承認された版と一致しません");
 		}
-		try {
-			publishCaption(prLabel);
-		} catch (IllegalArgumentException e) {
-			violations.add("PR表記を含めると" + e.getMessage());
+		Notices notices = notices(prLabel);
+		if (!content.caption().fitsWithNotices(notices.prefix(), notices.suffix())) {
+			violations.add(String.format(Locale.JAPAN, "%sを含めて%,d文字以内にしてください（%,d文字）", String.join("と", notices.names()),
+					Caption.MAX_LENGTH, content.caption().lengthWithNotices(notices.prefix(), notices.suffix())));
 		}
 		return List.copyOf(violations);
 	}
 
+	/** 公開用キャプション（PR案件ならPR表記、写真風の生成画像を含むならAI生成の表示付き）。上限を超えるなら例外 */
 	public Caption publishCaption(String prLabel) {
-		return content.prCategory().applyLabel(content.caption(), prLabel);
+		Notices notices = notices(prLabel);
+		return content.caption().withNotices(notices.prefix(), notices.suffix());
+	}
+
+	/** Instagram の AI info（is_ai_generated）とキャプション末尾の定型文を付けるか */
+	public AiDisclosure aiDisclosure() {
+		return AiDisclosure.of(content.media());
+	}
+
+	/** 公開用キャプションの付記（先頭のPR表記・末尾のAI生成の表示）。組み立てはここ1か所だけ（REQ-005 設計 2章。TS の Post.noticesOf と揃える） */
+	private Notices notices(String prLabel) {
+		String prefix = content.prCategory().labelPrefix(prLabel);
+		AiDisclosure disclosure = aiDisclosure();
+		List<String> names = new ArrayList<>();
+		if (!prefix.isEmpty()) {
+			names.add(PR_LABEL_NAME);
+		}
+		if (disclosure.isRequired()) {
+			names.add(AiDisclosure.NAME);
+		}
+		return new Notices(prefix, disclosure.suffix(), List.copyOf(names));
+	}
+
+	private static final String PR_LABEL_NAME = "PR表記";
+
+	private record Notices(String prefix, String suffix, List<String> names) {
 	}
 
 	public PostEvent published() {

@@ -1,6 +1,8 @@
 package jp.co.keai.niijimaig.post.domain;
 
-/** 投稿画像: 投稿に含まれる1枚の画像（順番・保存先・幅・高さ・容量） */
+import java.util.Optional;
+
+/** 投稿画像: 投稿に含まれる1枚の画像（順番・保存先・幅・高さ・容量）。生成画像なら、その由来（GeneratedImage）を持つ */
 public final class PostMedia {
 
 	private final int position;
@@ -8,8 +10,13 @@ public final class PostMedia {
 	private final int width;
 	private final int height;
 	private final long bytes;
+	private final GeneratedImage generated;
 
 	public PostMedia(int position, String storagePath, int width, int height, long bytes) {
+		this(position, storagePath, width, height, bytes, Optional.empty());
+	}
+
+	public PostMedia(int position, String storagePath, int width, int height, long bytes, Optional<GeneratedImage> generated) {
 		if (position < 1) {
 			throw new IllegalArgumentException("順番は1以上: " + position);
 		}
@@ -24,11 +31,17 @@ public final class PostMedia {
 		this.width = width;
 		this.height = height;
 		this.bytes = bytes;
+		this.generated = generated.orElse(null);
 	}
 
 	/** 同じ画像を別の保存先に複製したもの */
 	public PostMedia copiedTo(String newStoragePath) {
-		return new PostMedia(position, newStoragePath, width, height, bytes);
+		return new PostMedia(position, newStoragePath, width, height, bytes, Optional.ofNullable(generated));
+	}
+
+	/** 公開時にAI生成の表示が要る画像か（写真風の生成画像） */
+	boolean requiresAiDisclosure() {
+		return generated != null && generated.requiresAiDisclosure();
 	}
 
 	public int width() {

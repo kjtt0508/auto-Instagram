@@ -26,9 +26,20 @@ public final class Caption {
 		return Hashtag.IN_TEXT.matcher(text).results().count();
 	}
 
-	/** 先頭に文字列を付けた新しいキャプション（付けた結果も上限を守る） */
-	public Caption prefixed(String prefix) {
-		return new Caption(prefix + text);
+	/** 先頭と末尾に付記（PR表記・AI生成の表示）を付けた新しいキャプション（付けた結果も上限を守る。守れなければ例外） */
+	Caption withNotices(String prefix, String suffix) {
+		return new Caption(prefix + text + suffix);
+	}
+
+	/** 付記を付けても上限に収まるか */
+	boolean fitsWithNotices(String prefix, String suffix) {
+		return lengthWithNotices(prefix, suffix) <= MAX_LENGTH;
+	}
+
+	/** 付記を付けたときの文字数（コードポイントで数える） */
+	int lengthWithNotices(String prefix, String suffix) {
+		String joined = prefix + text + suffix;
+		return joined.codePointCount(0, joined.length());
 	}
 
 	public String text() {

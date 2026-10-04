@@ -1,11 +1,15 @@
 package jp.co.keai.niijimaig.support;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
+import jp.co.keai.niijimaig.image.application.CandidateImages;
+import jp.co.keai.niijimaig.image.domain.ImageCandidate;
 import jp.co.keai.niijimaig.post.application.InAttemptRetry;
 import jp.co.keai.niijimaig.post.application.MediaStorage;
 
@@ -33,6 +37,22 @@ public class FakeExternalsConfiguration {
 				return "https://example.supabase.co/storage/v1/object/public/media-public/" + publicPath;
 			}
 		};
+	}
+
+	@Bean
+	@Primary
+	FakeCandidateStorage fakeCandidateStorage() {
+		return new FakeCandidateStorage();
+	}
+
+	/** 消すよう頼まれた候補を覚えておく */
+	public static class FakeCandidateStorage implements CandidateImages.Storage {
+		public final List<ImageCandidate> deleted = new ArrayList<>();
+
+		@Override
+		public void delete(List<ImageCandidate> candidates) {
+			deleted.addAll(candidates);
+		}
 	}
 
 	@Bean

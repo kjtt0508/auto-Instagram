@@ -28,6 +28,7 @@ import jp.co.keai.niijimaig.connection.infrastructure.TokenCipher;
 import jp.co.keai.niijimaig.job.domain.JobType;
 import jp.co.keai.niijimaig.post.domain.FailureKind;
 import jp.co.keai.niijimaig.support.FakeExternalsConfiguration;
+import jp.co.keai.niijimaig.support.FakeExternalsConfiguration.FakeCandidateStorage;
 import jp.co.keai.niijimaig.support.FakeInstagram;
 import jp.co.keai.niijimaig.support.SupabaseFixture;
 import jp.co.keai.niijimaig.support.SupabaseFixture.LoggedIn;
@@ -42,6 +43,7 @@ class TickScenarioTest {
 	@Autowired DailyScenario daily;
 	@Autowired JobRepository jobs;
 	@Autowired FakeInstagram instagram;
+	@Autowired FakeCandidateStorage candidateStorage;
 	@Autowired TokenCipher cipher;
 	@Autowired JdbcTemplate jdbc;
 	@Autowired TransactionTemplate tx;
@@ -209,11 +211,87 @@ class TickScenarioTest {
 				 where c.tenant_id = ? and g.grant_kind = 'REFRESH'""", Integer.class, tenant)).isEqualTo(1);
 	}
 
+	@Test
+	@DisplayName("AC-005-11 写真風の生成画像を含むカルーセル3枚は、親コンテナに AI info が付き、キャプション末尾にAI生成の表示が付く")
+	void aiInfoOnCarouselParent() {
+		UUID generation = UUID.randomUUID();
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'PHOTOREALISTIC', '桜並木', "
+				+ "'cherry blossoms', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 4)", generation, tenant, editor.memberId()));
+		String media = IntStream.rangeClosed(1, 3).mapToObj(i -> mediaJson(i, i == 2 ? generation : null)).reduce((a, b) -> a + "," + b)
+				.orElseThrow();
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), "学園祭", "CAROUSEL", "[" + media + "]");
+
+		tick.run("run-8");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		assertThat(instagram.aiGeneratedContainers).hasSize(1);
+		assertThat(instagram.publishedCaptions).containsExactly("学園祭\n※画像はAIで生成したイメージです");
+	}
+
+	@Test
+	@DisplayName("AC-005-11 撮った写真だけの投稿には AI info もAI生成の表示も付かない")
+	void noAiInfoForPhotos() {
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), "写真だけ");
+
+		tick.run("run-9");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		assertThat(instagram.aiGeneratedContainers).isEmpty();
+		assertThat(instagram.publishedCaptions).containsExactly("写真だけ");
+	}
+
+	@Test
+	@DisplayName("AC-001-15 AI生成の表示付きの投稿も、中断後はAI生成の表示込みのキャプションで公開済みを見つけ、二重公開しない")
+	void recoversAiDisclosedPost() {
+		UUID generation = UUID.randomUUID();
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'PHOTOREALISTIC', '桜並木', "
+				+ "'cherry blossoms', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 4)", generation, tenant, editor.memberId()));
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), "中断AI", "FEED_IMAGE", "[" + mediaJson(1, generation) + "]");
+		tick.run("run-10a");
+		simulateCrashAfterPublish(post);
+
+		tick.run("run-10b");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		assertThat(instagram.publishCalls.get()).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("AC-005-13 daily は画像生成から24時間を過ぎた候補の画像を消し、画像生成の記録は残す。24時間以内の候補は消さない")
+	void dailyDeletesAbandonedCandidates() {
+		UUID old = UUID.randomUUID();
+		UUID fresh = UUID.randomUUID();
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '桜並木', "
+				+ "'cherry blossoms', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 3)", old, tenant, editor.memberId()));
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '海', "
+				+ "'sea', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 4)", fresh, tenant, editor.memberId()));
+		jdbc.execute("alter table image_generations disable trigger user");
+		jdbc.update("update image_generations set requested_at = now() - interval '25 hours' where id = ?", old);
+		jdbc.execute("alter table image_generations enable trigger user");
+		candidateStorage.deleted.clear();
+
+		daily.run("daily-3");
+
+		assertThat(candidateStorage.deleted).filteredOn(c -> c.generationId().equals(old))
+				.extracting(c -> c.position()).containsExactly(1, 2, 3);
+		assertThat(candidateStorage.deleted).noneMatch(c -> c.generationId().equals(fresh));
+		assertThat(jdbc.queryForObject("select count(*) from image_generations where id = ?", Integer.class, old)).isEqualTo(1);
+	}
+
+	private String mediaJson(int position, UUID generation) {
+		String origin = generation == null ? "" : ",\"generation\":{\"generationId\":\"" + generation + "\",\"candidatePosition\":1}";
+		return "{\"position\":" + position + ",\"storagePath\":\"" + tenant + "/posts/" + UUID.randomUUID()
+				+ ".jpg\",\"width\":1080,\"height\":1350,\"byteSize\":500000" + origin + "}";
+	}
+
 	private UUID approvedPost(Instant scheduledAt, String caption) {
+		return approvedPost(scheduledAt, caption, "FEED_IMAGE", "[" + mediaJson(1, null) + "]");
+	}
+
+	private UUID approvedPost(Instant scheduledAt, String caption, String format, String mediaArray) {
 		String revision = """
-				{"format":"FEED_IMAGE","mediaSource":"UPLOAD","caption":"%s","prCategory":"NONE",
-				 "media":[{"position":1,"storagePath":"%s/posts/%s.jpg","width":1080,"height":1350,"byteSize":500000}]}
-				""".formatted(caption, tenant, UUID.randomUUID());
+				{"format":"%s","mediaSource":"UPLOAD","caption":"%s","prCategory":"NONE","media":%s}
+				""".formatted(format, caption, mediaArray);
 		UUID post = db.as(editor, j -> j.queryForObject("select post_id from public.save_post_revision(null, ?::jsonb)", UUID.class, revision));
 		UUID rev = jdbc.queryForObject("select id from post_revisions where post_id = ?", UUID.class, post);
 		db.as(editor, j -> j.queryForList("select public.request_approval(?, ?)", post, rev));

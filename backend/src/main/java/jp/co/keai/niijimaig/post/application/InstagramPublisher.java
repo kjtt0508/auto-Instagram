@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import jp.co.keai.niijimaig.connection.domain.InstagramConnection;
+import jp.co.keai.niijimaig.post.domain.AiDisclosure;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.PublishResult;
 
@@ -17,11 +18,13 @@ public interface InstagramPublisher {
 	/** 24時間の公開数に余裕があるか */
 	boolean hasPublishingQuota(InstagramConnection connection);
 
-	String createImageContainer(InstagramConnection connection, String imageUrl, Caption caption);
+	/** AI生成の表示が要るなら AI info（is_ai_generated）を付ける（REQ-005 AC-005-11） */
+	String createImageContainer(InstagramConnection connection, String imageUrl, Caption caption, AiDisclosure disclosure);
 
 	String createCarouselItem(InstagramConnection connection, String imageUrl);
 
-	String createCarouselContainer(InstagramConnection connection, List<String> childIds, Caption caption);
+	/** カルーセルは親コンテナに AI info を付ける */
+	String createCarouselContainer(InstagramConnection connection, List<String> childIds, Caption caption, AiDisclosure disclosure);
 
 	ContainerState containerState(InstagramConnection connection, String containerId);
 

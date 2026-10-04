@@ -13,6 +13,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.FailureReason;
+import jp.co.keai.niijimaig.post.domain.GeneratedImage;
+import jp.co.keai.niijimaig.post.domain.ImageStyle;
 import jp.co.keai.niijimaig.post.domain.Post;
 import jp.co.keai.niijimaig.post.domain.PostEvent;
 import jp.co.keai.niijimaig.post.domain.PostFormat;
@@ -53,7 +55,7 @@ public class JdbcPostRepository implements PostRepository {
 		UUID revisionId = rs.getObject("revision_id", UUID.class);
 		Post.ApprovedContent content = new Post.ApprovedContent(revisionId,
 				PostFormat.valueOf(rs.getString("format")), new Caption(rs.getString("caption")),
-				PrCategory.valueOf(rs.getString("pr_category")), media("post_media", revisionId));
+				PrCategory.valueOf(rs.getString("pr_category")), approvedMedia(revisionId));
 		return new Post(new Post.Identity(rs.getObject("post_id", UUID.class), rs.getObject("tenant_id", UUID.class)),
 				PostStatus.valueOf(rs.getString("status")), content,
 				ScheduledAt.restore(rs.getTimestamp("scheduled_at").toInstant()));
@@ -62,6 +64,26 @@ public class JdbcPostRepository implements PostRepository {
 	@Override
 	public PostMediaList preparedMedia(UUID revisionId) {
 		return media("publish_media", revisionId);
+	}
+
+	/** 承認された版の投稿画像。生成画像の由来つきで読む（post_media_origin。REQ-005 設計 5章） */
+	private PostMediaList approvedMedia(UUID revisionId) {
+		List<PostMedia> media = jdbc.query("""
+				select position, storage_path, width, height, byte_size, generation_id, candidate_position, style
+				  from post_media_origin where revision_id = ? order by position
+				""", (rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
+						rs.getInt("height"), rs.getLong("byte_size"), generatedOf(rs)),
+				revisionId);
+		return new PostMediaList(media);
+	}
+
+	private Optional<GeneratedImage> generatedOf(ResultSet rs) throws SQLException {
+		UUID generationId = rs.getObject("generation_id", UUID.class);
+		if (generationId == null) {
+			return Optional.empty();
+		}
+		return Optional.of(new GeneratedImage(generationId, rs.getInt("candidate_position"),
+				ImageStyle.valueOf(rs.getString("style"))));
 	}
 
 	private PostMediaList media(String table, UUID revisionId) {

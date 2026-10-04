@@ -3,6 +3,11 @@ package jp.co.keai.niijimaig.post.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -33,13 +38,43 @@ class CaptionTest {
 	@Test
 	@DisplayName("AC-001-09 PR案件はPR表記を付けた結果も2,200文字以内でなければならない")
 	void prLabelCountsTowardLimit() {
-		Caption body = new Caption("あ".repeat(2196));
 		String label = "【PR】\n"; // 5文字
 
-		assertThatThrownBy(() -> PrCategory.PR.applyLabel(body, label)).hasMessageContaining("2200文字以内");
-		assertThat(PrCategory.PR.applyLabel(new Caption("あ".repeat(2195)), label).text()).hasSize(2200);
-		assertThat(PrCategory.NONE.applyLabel(body, label)).isEqualTo(body);
-		assertThat(PrCategory.PR.applyLabel(new Caption("学園祭"), label).text()).isEqualTo("【PR】\n学園祭");
+		assertThatThrownBy(() -> post("あ".repeat(2196), PrCategory.PR, ImageStyle.ILLUSTRATION).publishCaption(label))
+				.hasMessageContaining("2200文字以内");
+		assertThat(post("あ".repeat(2195), PrCategory.PR, null).publishCaption(label).text()).hasSize(2200);
+		assertThat(post("学園祭", PrCategory.NONE, null).publishCaption(label).text()).isEqualTo("学園祭");
+		assertThat(post("学園祭", PrCategory.PR, null).publishCaption(label).text()).isEqualTo("【PR】\n学園祭");
+	}
+
+	@Test
+	@DisplayName("AC-005-04 AC-005-10 写真風の生成画像を含むと、末尾に改行とAI生成の表示が付く。背景・イラストには付かない")
+	void aiDisclosureAtTheEnd() {
+		String label = "【PR】\n";
+
+		assertThat(post("学園祭", PrCategory.PR, ImageStyle.PHOTOREALISTIC).publishCaption(label).text())
+				.isEqualTo("【PR】\n学園祭\n※画像はAIで生成したイメージです");
+		assertThat(post("学園祭", PrCategory.NONE, ImageStyle.ILLUSTRATION).publishCaption(label).text()).isEqualTo("学園祭");
+		assertThat(post("学園祭", PrCategory.NONE, ImageStyle.PHOTOREALISTIC).aiDisclosure().isRequired()).isTrue();
+		assertThat(post("学園祭", PrCategory.NONE, ImageStyle.ILLUSTRATION).aiDisclosure().isRequired()).isFalse();
+	}
+
+	@Test
+	@DisplayName("AC-005-10 付記込みで2,200文字を超えると、公開できない理由に付記の名前と文字数が出る")
+	void noticeViolation() {
+		Post post = post("あ".repeat(2178), PrCategory.PR, ImageStyle.PHOTOREALISTIC);
+
+		assertThat(post.violationsForPublishing(post.approvedMedia(), new ImageSpec(), "【PR】\n"))
+				.containsExactly("PR表記とAI生成の表示を含めて2,200文字以内にしてください（2,201文字）");
+	}
+
+	/** 1枚の投稿。style が null なら撮った写真、そうでなければその種類の生成画像 */
+	static Post post(String caption, PrCategory category, ImageStyle style) {
+		Optional<GeneratedImage> generated = Optional.ofNullable(style).map(s -> new GeneratedImage(UUID.randomUUID(), 1, s));
+		PostMediaList media = new PostMediaList(List.of(new PostMedia(1, "t/posts/a.jpg", 1080, 1350, 500_000, generated)));
+		return new Post(new Post.Identity(UUID.randomUUID(), UUID.randomUUID()), PostStatus.SCHEDULED,
+				new Post.ApprovedContent(UUID.randomUUID(), PostFormat.FEED_IMAGE, new Caption(caption), category, media),
+				ScheduledAt.restore(Instant.parse("2026-11-03T01:00:00Z")));
 	}
 
 	private String tags(int count) {

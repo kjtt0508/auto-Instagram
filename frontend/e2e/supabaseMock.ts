@@ -4,8 +4,14 @@ import type { Page, Route } from "@playwright/test";
 const SUPABASE = "https://e2e.supabase.test";
 const MINUTE_MS = 60 * 1000;
 
-export type MockPost = { id: string; status: string; scheduledAt?: Date; publishedAt?: Date; failure?: { kind: string; message: string } };
-export type MockWorld = { role: "ADMIN" | "APPROVER" | "EDITOR"; heartbeatMinutesAgo: number; posts: MockPost[] };
+export type MockPost = {
+  id: string; status: string; scheduledAt?: Date; publishedAt?: Date; failure?: { kind: string; message: string };
+  generatedStyle?: "ILLUSTRATION" | "PHOTOREALISTIC"; // 1枚目が生成画像（REQ-005）
+};
+export type MockWorld = {
+  role: "ADMIN" | "APPROVER" | "EDITOR"; heartbeatMinutesAgo: number; posts: MockPost[];
+  imageGenerationsUsed?: number; // 今日の画像生成の回数（上限20回・警告0.8）
+};
 
 export const minutesFromNow = (minutes: number) => new Date(Date.now() + minutes * MINUTE_MS);
 
@@ -26,6 +32,9 @@ function respond(route: Route, world: MockWorld, rpcCalls: string[]) {
   if (path.startsWith("rpc/")) {
     rpcCalls.push(path.slice(4));
     if (path === "rpc/save_post_revision") return json(route, [{ post_id: "new-post", revision_id: "new-post-r1" }]);
+    if (path === "rpc/image_generation_usage") {
+      return json(route, [{ used: world.imageGenerationsUsed ?? 0, daily_limit: 20, warn_ratio: 0.8 }]);
+    }
     return json(route, path === "rpc/instagram_connection_status" ? [connection()] : null);
   }
   const rows = tableRows(path, url, world);
@@ -40,6 +49,7 @@ function tableRows(table: string, url: URL, world: MockWorld): unknown[] {
   if (table === "tenants") return [{ id: "t1", name: "新島info" }];
   if (table === "tenant_settings_current") return [{ pr_label: "【PR】\n" }];
   if (table === "batch_heartbeats") return [{ at: minutesFromNow(-world.heartbeatMinutesAgo).toISOString() }];
+  if (table === "post_media_origin") return mediaRows(url, world);
   if (table === "post_media" || table === "post_events") return [];
   if (table === "post_current") return postRows(url, world);
   return [];
@@ -53,6 +63,14 @@ function postRows(url: URL, world: MockWorld): unknown[] {
     .filter((p) => !statusFilter || statusFilter.includes(p.status))
     .filter((p) => statusFilter || idFilter || p.scheduledAt || p.publishedAt)
     .map(toPostRow);
+}
+
+/** 生成画像を含む投稿だけ、1枚目を生成画像として返す（それ以外の投稿は画像なし） */
+function mediaRows(url: URL, world: MockWorld): unknown[] {
+  const post = world.posts.find((p) => url.searchParams.get("revision_id") === `eq.${p.id}-r1`);
+  if (!post?.generatedStyle) return [];
+  return [{ position: 1, storage_path: `t1/posts/${post.id}.jpg`, width: 1080, height: 1350, byte_size: 400000,
+    generation_id: "g1", candidate_position: 1, style: post.generatedStyle }];
 }
 
 const toPostRow = (p: MockPost) => ({

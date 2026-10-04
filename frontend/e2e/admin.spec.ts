@@ -59,6 +59,28 @@ test("AC-001-10 編集者には再実行も承認も出ない", async ({ page })
   await expect(page.getByRole("button", { name: "承認して予約" })).toHaveCount(0);
 });
 
+const GENERATED_IMAGE_CHECK = "写真風の生成画像を含みます。実際の出来事・場所・人の写真として使っていないか、実在の人物・商標が写っていないか確認してください";
+
+test("AC-005-08 写真風の生成画像を含む承認待ちの投稿を承認者が開くと、確認表示が出る", async ({ page }) => {
+  await useMockSupabase(page, world({ posts: [{ id: "awaiting", status: "AWAITING_APPROVAL", generatedStyle: "PHOTOREALISTIC" }] }));
+  await page.goto("/posts/view/?id=awaiting");
+  await expect(page.getByRole("button", { name: "承認して予約" })).toBeVisible();
+  await expect(page.getByText(GENERATED_IMAGE_CHECK)).toBeVisible();
+});
+
+test("AC-005-08 背景・イラストだけの投稿には確認表示が出ない", async ({ page }) => {
+  await useMockSupabase(page, world({ posts: [{ id: "awaiting", status: "AWAITING_APPROVAL", generatedStyle: "ILLUSTRATION" }] }));
+  await page.goto("/posts/view/?id=awaiting");
+  await expect(page.getByRole("button", { name: "承認して予約" })).toBeVisible();
+  await expect(page.getByText(GENERATED_IMAGE_CHECK)).toHaveCount(0);
+});
+
+test("AC-005-06 今日の画像生成が上限の8割（16回）に達していたら、ホームに「画像生成の上限が近い」警告", async ({ page }) => {
+  await useMockSupabase(page, world({ imageGenerationsUsed: 16 }));
+  await page.goto("/");
+  await expect(page.getByRole("alert").filter({ hasText: "今日の画像生成の上限が近づいています" })).toBeVisible();
+});
+
 test("NFR-001-02 承認待ちの確認から予約までホームから3タップ以内、375px で横スクロールなし", async ({ page }) => {
   const { rpcCalls } = await useMockSupabase(page, world());
   await page.goto("/");

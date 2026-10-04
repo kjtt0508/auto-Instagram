@@ -14,6 +14,7 @@ import jp.co.keai.niijimaig.connection.application.InstagramTokenRefresher;
 import jp.co.keai.niijimaig.connection.domain.InstagramConnection;
 import jp.co.keai.niijimaig.post.application.InstagramApiException;
 import jp.co.keai.niijimaig.post.application.InstagramPublisher;
+import jp.co.keai.niijimaig.post.domain.AiDisclosure;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.FailureKind;
 import jp.co.keai.niijimaig.post.domain.PublishResult;
@@ -37,6 +38,7 @@ public class FakeInstagram implements InstagramPublisher, InstagramTokenRefreshe
 		publishedCaptions.clear();
 		publishCalls.set(0);
 		containerCalls.set(0);
+		aiGeneratedContainers.clear();
 		refreshFailure = Optional.empty();
 	}
 
@@ -46,8 +48,8 @@ public class FakeInstagram implements InstagramPublisher, InstagramTokenRefreshe
 	}
 
 	@Override
-	public String createImageContainer(InstagramConnection connection, String imageUrl, Caption caption) {
-		return container(caption.text());
+	public String createImageContainer(InstagramConnection connection, String imageUrl, Caption caption, AiDisclosure disclosure) {
+		return marked(container(caption.text()), disclosure);
 	}
 
 	@Override
@@ -56,8 +58,19 @@ public class FakeInstagram implements InstagramPublisher, InstagramTokenRefreshe
 	}
 
 	@Override
-	public String createCarouselContainer(InstagramConnection connection, List<String> childIds, Caption caption) {
-		return container(caption.text());
+	public String createCarouselContainer(InstagramConnection connection, List<String> childIds, Caption caption,
+			AiDisclosure disclosure) {
+		return marked(container(caption.text()), disclosure);
+	}
+
+	/** AI info（is_ai_generated=true）を付けて作ったコンテナ */
+	public final List<String> aiGeneratedContainers = new ArrayList<>();
+
+	private String marked(String containerId, AiDisclosure disclosure) {
+		if (disclosure.isRequired()) {
+			aiGeneratedContainers.add(containerId);
+		}
+		return containerId;
 	}
 
 	private String container(String caption) {
@@ -94,7 +107,10 @@ public class FakeInstagram implements InstagramPublisher, InstagramTokenRefreshe
 
 	@Override
 	public Optional<String> findPublishedMedia(InstagramConnection connection, Caption caption, Instant since) {
-		return publishedCaptions.contains(caption.text()) ? Optional.of("m-recovered") : Optional.empty();
+		// 公開したメディアのID（他のテストの公開と重ならない）を返す
+		return captions.entrySet().stream()
+				.filter(e -> e.getValue().equals(caption.text()) && states.get(e.getKey()) == ContainerState.PUBLISHED)
+				.map(e -> "m-" + e.getKey()).findFirst();
 	}
 
 	@Override

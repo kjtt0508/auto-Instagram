@@ -2,21 +2,13 @@ package jp.co.keai.niijimaig.post.domain;
 
 /** PR区分: 対価を受けた広告かどうか。ステマ規制への対応で、PR案件は公開時にPR表記を先頭に付ける */
 public enum PrCategory {
-	NONE {
-		@Override
-		public Caption applyLabel(Caption caption, String label) {
-			return caption;
-		}
-	},
-	PR {
-		@Override
-		public Caption applyLabel(Caption caption, String label) {
-			return caption.prefixed(label);
-		}
-	};
+	NONE,
+	PR;
 
-	/** 公開用キャプションを作る。PR表記を付けた結果が上限を超えるなら例外 */
-	public abstract Caption applyLabel(Caption caption, String label);
+	/** 公開用キャプションの先頭に付ける文字列（PR案件ならPR表記、それ以外は空）。上限の検査は Post が付記全体で行う */
+	public String labelPrefix(String label) {
+		return requiresLabel() ? label : "";
+	}
 
 	public boolean requiresLabel() {
 		return this == PR;

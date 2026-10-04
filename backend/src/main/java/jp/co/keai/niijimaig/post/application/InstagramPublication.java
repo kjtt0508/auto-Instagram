@@ -77,12 +77,14 @@ final class InstagramPublication {
 	private String createContainers(Target target) {
 		InstagramConnection connection = target.connection();
 		if (!target.post().format().needsChildContainers()) {
-			String single = retry.call(() -> instagram.createImageContainer(connection, target.imageUrls().get(0), target.caption()));
+			String single = retry.call(() -> instagram.createImageContainer(connection, target.imageUrls().get(0), target.caption(),
+					target.post().aiDisclosure()));
 			log.recordContainer(target.post().id(), target.attemptId(), ContainerKind.SINGLE, single);
 			return single;
 		}
 		List<String> children = target.imageUrls().stream().map(url -> createChild(target, url)).toList();
-		String carousel = retry.call(() -> instagram.createCarouselContainer(connection, children, target.caption()));
+		String carousel = retry.call(() -> instagram.createCarouselContainer(connection, children, target.caption(),
+				target.post().aiDisclosure()));
 		log.recordContainer(target.post().id(), target.attemptId(), ContainerKind.CAROUSEL, carousel);
 		return carousel;
 	}

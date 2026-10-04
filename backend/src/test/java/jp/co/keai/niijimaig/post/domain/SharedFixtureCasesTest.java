@@ -39,24 +39,42 @@ class SharedFixtureCasesTest {
 	static Stream<JsonNode> imageCases() { return cases("image-spec.json", "images"); }
 	static Stream<JsonNode> mediaCountCases() { return cases("image-spec.json", "mediaCounts"); }
 	static Stream<JsonNode> scheduleCases() { return cases("scheduled-at.json", "decide"); }
+	static Stream<JsonNode> styleCases() { return cases("image-style.json", "styles"); }
 
 	@ParameterizedTest(name = "{0}")
 	@MethodSource("captionCases")
-	void キャプションとPR表記_AC_001_08_09(JsonNode c) {
+	void キャプションとPR表記とAI生成の表示_AC_001_08_09_AC_005_04_10(JsonNode c) {
 		StringBuilder text = new StringBuilder();
 		c.get("segments").forEach(s -> text.append(s.get("repeat").asString().repeat(s.get("count").asInt())));
 		if (!c.get("valid").asBoolean()) {
 			assertThatThrownBy(() -> new Caption(text.toString())).isInstanceOf(IllegalArgumentException.class);
 			return;
 		}
-		Caption caption = new Caption(text.toString());
 		PrCategory category = PrCategory.valueOf(c.get("prCategory").asString());
+		ImageStyle style = c.path("aiDisclosure").asBoolean(false) ? ImageStyle.PHOTOREALISTIC : null;
+		Post post = CaptionTest.post(text.toString(), category, style);
 		String label = fixture("caption.json").get("prLabel").asString();
-		if (c.get("publishValid").asBoolean()) {
-			assertThat(category.applyLabel(caption, label)).isNotNull();
-		} else {
-			assertThatThrownBy(() -> category.applyLabel(caption, label)).isInstanceOf(IllegalArgumentException.class);
+		if (!c.get("publishValid").asBoolean()) {
+			assertThatThrownBy(() -> post.publishCaption(label)).isInstanceOf(IllegalArgumentException.class);
+			return;
 		}
+		Caption published = post.publishCaption(label);
+		JsonNode expected = c.path("publishText");
+		if (expected.isMissingNode()) {
+			return;
+		}
+		assertThat(published.text()).startsWith(expected.get("prefix").asString())
+				.endsWith(expected.path("suffix").asString(""));
+		assertThat(published.text().codePointCount(0, published.text().length())).isEqualTo(expected.get("length").asInt());
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("styleCases")
+	void 画像の種類ごとの扱い_BR_005_01(JsonNode c) {
+		ImageStyle style = ImageStyle.valueOf(c.get("code").asString());
+		assertThat(style.showsCaution()).isEqualTo(c.get("showsCaution").asBoolean());
+		assertThat(style.needsApprovalCheck()).isEqualTo(c.get("needsApprovalCheck").asBoolean());
+		assertThat(style.requiresAiDisclosure()).isEqualTo(c.get("requiresAiDisclosure").asBoolean());
 	}
 
 	@ParameterizedTest(name = "{0}")

@@ -45,6 +45,11 @@ public final class PostMediaList {
 		return media.stream().anyMatch(m -> m.position() == position);
 	}
 
+	/** 写真風の生成画像を1枚でも含むか（AI生成の表示が要る。BR-005-05） */
+	boolean requiresAiDisclosure() {
+		return media.stream().anyMatch(PostMedia::requiresAiDisclosure);
+	}
+
 	public List<String> storagePaths() {
 		return media.stream().map(PostMedia::storagePath).toList();
 	}
