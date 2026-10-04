@@ -39,9 +39,10 @@ export async function clearCandidates(generationId: string): Promise<void> {
   await callApi<void>(`/api/image-generations/${encodeURIComponent(generationId)}/clear`).catch(() => undefined);
 }
 
-/** 今日の画像生成の回数 */
-export async function imageGenerationUsage(): Promise<ImageGenerationUsage> {
-  const rows = unwrap(await supabase().rpc("image_generation_usage")) as { used: number; daily_limit: number; warn_ratio: number }[];
-  const row = rows[0] ?? { used: 0, daily_limit: 1, warn_ratio: 1 };
+/** 今日の画像生成の回数。団体に画像生成の設定が無ければ null（回数を出さない） */
+export async function imageGenerationUsage(): Promise<ImageGenerationUsage | null> {
+  const rows = unwrap(await supabase().rpc("image_generation_usage")) as { used: number; daily_limit: number; warn_ratio: number }[] | null;
+  const row = rows?.[0];
+  if (!row) return null;
   return toUsage({ used: row.used, dailyLimit: row.daily_limit, warnRatio: Number(row.warn_ratio) });
 }

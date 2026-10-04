@@ -68,6 +68,25 @@ async function useMockImageGeneration(page: Page) {
   return calls;
 }
 
+test("AC-005-07 提供元の失敗で「画像を生成できませんでした」と出ても、作成中の投稿の画像とキャプションは失われない", async ({ page }) => {
+  await useMockSupabase(page, { role: "EDITOR", heartbeatMinutesAgo: 5, posts: [] });
+  await page.route("**/api/image-generations**", (route) => route.fulfill({ status: 502, contentType: "application/json",
+    body: JSON.stringify({ error: { code: "GENERATION_FAILED", message: "画像を生成できませんでした" } }) }));
+  await page.goto("/posts/new/");
+  await page.getByLabel("写真を選ぶ").setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: solidPng(1200, 1600) });
+  await expect(page.getByText("1枚目")).toBeVisible();
+  await page.getByRole("textbox", { name: "キャプション" }).fill("書きかけのお知らせ");
+
+  await page.getByRole("button", { name: "AIで作る" }).click();
+  await page.getByRole("textbox", { name: "作りたい画像" }).fill("桜並木");
+  await page.getByRole("button", { name: "生成" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toHaveText("画像を生成できませんでした");
+  await page.getByRole("dialog").getByRole("button", { name: "キャンセル" }).click();
+
+  await expect(page.getByText("画像の投稿（1枚）")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "キャプション" })).toHaveValue("書きかけのお知らせ");
+});
+
 test("AC-005-09 種類「写真風」を選ぶと、イメージ写真としてだけ使える旨の注意書きが出る", async ({ page }) => {
   await useMockSupabase(page, { role: "EDITOR", heartbeatMinutesAgo: 5, posts: [] });
   await page.goto("/posts/new/");

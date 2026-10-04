@@ -229,6 +229,21 @@ class TickScenarioTest {
 	}
 
 	@Test
+	@DisplayName("AC-005-05 背景・イラストの生成画像だけの投稿には AI info もAI生成の表示も付かない")
+	void noAiInfoForIllustration() {
+		UUID generation = UUID.randomUUID();
+		db.asServiceRole(j -> j.queryForList("select public.record_image_generation(?, ?, ?, 'ILLUSTRATION', '桜並木', "
+				+ "'cherry blossoms', 'CLOUDFLARE_WORKERS_AI', 'flux', 'SUCCEEDED', 4)", generation, tenant, editor.memberId()));
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), "イラスト", "FEED_IMAGE", "[" + mediaJson(1, generation) + "]");
+
+		tick.run("run-11");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		assertThat(instagram.aiGeneratedContainers).isEmpty();
+		assertThat(instagram.publishedCaptions).containsExactly("イラスト");
+	}
+
+	@Test
 	@DisplayName("AC-005-11 撮った写真だけの投稿には AI info もAI生成の表示も付かない")
 	void noAiInfoForPhotos() {
 		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), "写真だけ");

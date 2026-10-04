@@ -178,7 +178,8 @@ begin
           p_revision ->> 'prCategory', nullif(p_revision ->> 'genreId', '')::uuid, me.member_id)
   returning id into rev;
   for item in select * from jsonb_array_elements(coalesce(p_revision -> 'media', '[]'::jsonb)) loop
-    if position((me.tenant_id::text || '/posts/') in (item ->> 'storagePath')) <> 1 then
+    -- {団体}/posts/{ファイル名}.jpg の形だけ（../ などで別の場所を指させない）
+    if (item ->> 'storagePath') !~ ('^' || me.tenant_id::text || '/posts/[A-Za-z0-9_-]+\.jpg$') then
       raise exception '投稿画像の保存先が正しくありません' using errcode = '42501';
     end if;
     insert into post_media (revision_id, position, storage_path, width, height, byte_size)

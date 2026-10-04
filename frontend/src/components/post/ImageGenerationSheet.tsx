@@ -16,17 +16,24 @@ export type ChosenCandidate = { candidate: ImageCandidate; image: Blob };
  * S-13 画像を生成する（REQ-005 設計 3章）: ①画像の種類 ②指示 ③今日の残り回数 ④生成 ⑤候補（2×2、複数選べる）⑥選んだ画像を使う。
  * 閉じるときは候補を片付ける（失敗しても daily が消す）
  */
-export function ImageGenerationSheet({ onChoose, onClose }: { onChoose: (chosen: ChosenCandidate[]) => Promise<void>; onClose: () => void }) {
+export function ImageGenerationSheet({ maxChoices, onChoose, onClose }: {
+  maxChoices: number; onChoose: (chosen: ChosenCandidate[]) => Promise<void>; onClose: () => void;
+}) {
   const [style, setStyle] = useState<ImageStyle>(ImageStyle.ILLUSTRATION);
   const [promptText, setPromptText] = useState("");
   const [usage, setUsage] = useState<ImageGenerationUsage | null>(null);
-  const [result, setResult] = useState<{ generationId: string; candidates: { position: number; url: string }[] } | null>(null);
+  // 候補は生成した時の画像の種類を持つ（生成後にセグメントを切り替えても、採用する候補の種類は変わらない）
+  const [result, setResult] = useState<{ generationId: string; style: ImageStyle; candidates: { position: number; url: string }[] } | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     imageGenerationUsage().then(setUsage, () => setUsage(null));
   }, []);
+  const toggle = (position: number) => {
+    if (selected.includes(position)) return setSelected(selected.filter((p) => p !== position));
+    if (selected.length < maxChoices) setSelected([...selected, position]); // 投稿画像の残り枠を超えては選べない
+  };
 
   const generate = async () => {
     const violations = ImagePrompt.violationsOf(promptText);
@@ -36,7 +43,7 @@ export function ImageGenerationSheet({ onChoose, onClose }: { onChoose: (chosen:
     try {
       if (result) await clearCandidates(result.generationId);
       const generated = await generateCandidates(style, ImagePrompt.of(promptText));
-      setResult(generated);
+      setResult({ ...generated, style });
       setUsage(generated.usage);
       setSelected([]);
     } catch (e) {
@@ -51,7 +58,7 @@ export function ImageGenerationSheet({ onChoose, onClose }: { onChoose: (chosen:
     setBusy("画像を投稿用に変換しています…");
     try {
       const chosen = await Promise.all(selected.map(async (position) => ({
-        candidate: ImageCandidate.of({ generationId: result.generationId, position, style }),
+        candidate: ImageCandidate.of({ generationId: result.generationId, position, style: result.style }),
         image: await (await fetch(result.candidates.find((c) => c.position === position)!.url)).blob(),
       })));
       await onChoose(chosen);
@@ -83,8 +90,7 @@ export function ImageGenerationSheet({ onChoose, onClose }: { onChoose: (chosen:
       <PromptField value={promptText} onChange={setPromptText} usage={usage} />
       {error && <p role="alert" className="mt-3 px-4 text-[15px] text-destructive">{error}</p>}
       {busy && <p role="status" className="mt-3 px-4 text-center text-[15px] text-secondary-label">{busy}</p>}
-      {result && !busy && <CandidateGrid candidates={result.candidates} selected={selected} onToggle={(p) =>
-        setSelected(selected.includes(p) ? selected.filter((x) => x !== p) : [...selected, p])} />}
+      {result && !busy && <CandidateGrid candidates={result.candidates} selected={selected} maxChoices={maxChoices} onToggle={toggle} />}
       <div className="fixed inset-x-0 bottom-0 border-t border-separator bg-bar pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div className="mx-auto grid max-w-xl grid-cols-2 gap-2 px-4 py-2">
           <Button variant="tinted" disabled={busy !== null || (usage !== null && !usage.canGenerate())} onClick={generate}>
@@ -111,11 +117,11 @@ function PromptField({ value, onChange, usage }: { value: string; onChange: (v: 
   );
 }
 
-function CandidateGrid({ candidates, selected, onToggle }: {
-  candidates: { position: number; url: string }[]; selected: number[]; onToggle: (position: number) => void;
+function CandidateGrid({ candidates, selected, maxChoices, onToggle }: {
+  candidates: { position: number; url: string }[]; selected: number[]; maxChoices: number; onToggle: (position: number) => void;
 }) {
   return (
-    <GroupedSection title="候補（タップで選ぶ・複数可）" label="候補">
+    <GroupedSection title={`候補（タップで選ぶ・${maxChoices}枚まで）`} label="候補">
       <ul className="grid grid-cols-2 gap-2 p-2">
         {candidates.map((c) => (
           <li key={c.position}>

@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * 候補: 画像生成で作られ、まだ採用されていない画像。採用されなければ残さない（REQ-005 BR-005-04）。
+ * 候補: 画像生成で作られ、まだ採用されていない画像。採用されなければ残さない（REQ-005 BR-005-11）。
  * どの団体の、どの画像生成の何番目（1〜4）かと、画像生成の日時を持つ
  */
 public record ImageCandidate(UUID tenantId, UUID generationId, int position, Instant generatedAt) {

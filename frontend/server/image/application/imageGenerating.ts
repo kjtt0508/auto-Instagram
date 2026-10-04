@@ -35,7 +35,7 @@ export class ImageGenerating {
     const id = this.deps.newId();
     const { urls, timedOut } = await this.makeCandidates(member, id, settings, translated, started);
     const generation = ImageGeneration.of({ id, style, prompt, translatedPrompt: translated, candidateCount: urls.length });
-    await this.deps.records.record(member, generation, settings.generator);
+    await this.recordOrDiscard(member, generation, settings);
     if (!generation.isSucceeded()) throw this.failure(timedOut);
     return { generationId: id, candidates: urls.map((url, i) => ({ position: i + 1, url })),
       usage: { used: reserved.used, dailyLimit: settings.quota.dailyLimit, warnRatio: settings.quota.warnRatio } };
@@ -83,8 +83,24 @@ export class ImageGenerating {
       () => Promise.race([this.deps.images.generate(settings.generator, prompt), deadline])));
     clearTimeout(timer);
     const images = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-    const urls = await Promise.all(images.map((jpeg, i) => this.deps.records.saveCandidate(member.tenantId, id, i + 1, jpeg)));
+    const urls: string[] = [];
+    for (const jpeg of images) {
+      // 保存できなかった画像は候補にしない（位置は保存できた順に 1 から詰める）
+      const url = await this.deps.records.saveCandidate(member.tenantId, id, urls.length + 1, jpeg).catch(() => null);
+      if (url) urls.push(url);
+    }
     return { urls, timedOut: timedOut && urls.length === 0 };
+  }
+
+  /** ⑥記録できなければ、保存した候補を消してから失敗にする（記録の無い候補は daily が辿れない） */
+  private async recordOrDiscard(member: RequestingMember, generation: ImageGeneration, settings: GenerationSettings): Promise<void> {
+    try {
+      await this.deps.records.record(member, generation, settings.generator);
+    } catch (e) {
+      await this.deps.records.clearCandidates(member.tenantId, generation.id, generation.candidates().map((c) => c.position))
+        .catch(() => undefined);
+      throw e;
+    }
   }
 
   private failure(timedOut: boolean): ImageGenerationRefusal {

@@ -116,9 +116,11 @@ class ImageGenerationDatabaseTest {
 	@Test
 	@DisplayName("AC-005-12 投稿画像の保存先は自団体の posts/ に限る（候補の保存先 candidates/ は使えない）")
 	void mediaMustBeUnderPosts() {
-		String media = "[{\"position\":1,\"storagePath\":\"" + tenant + "/candidates/x/1.jpg\",\"width\":819,\"height\":1024,\"byteSize\":1}]";
+		for (String path : List.of(tenant + "/candidates/x/1.jpg", tenant + "/posts/../candidates/x/1.jpg")) {
+			String media = "[{\"position\":1,\"storagePath\":\"" + path + "\",\"width\":819,\"height\":1024,\"byteSize\":1}]";
 
-		assertThatThrownBy(() -> saveDraft(media)).rootCause().hasMessageContaining("保存先が正しくありません");
+			assertThatThrownBy(() -> saveDraft(media)).as(path).rootCause().hasMessageContaining("保存先が正しくありません");
+		}
 	}
 
 	@Test

@@ -10,10 +10,14 @@ import { createApiApp } from "./apiApp";
 // 画像生成の API（REQ-005 設計 1・4・6章）。Supabase・Gemini・Workers AI は偽物
 const GEMINI_KEY = "gemini-secret-key";
 const SERVICE_KEY = "service-role-secret";
+const OTHER_TENANT_GENERATION = "0b9e7c1e-0000-4000-8000-0000000000aa";
+const UNKNOWN_GENERATION = "0b9e7c1e-0000-4000-8000-0000000000bb";
 
 type World = {
   role?: string; used?: number; llmAllowed?: boolean; imageAllowed?: boolean; gemini?: "ok" | "error";
   ai?: "ok" | "error" | "partial"; model?: string;
+  uploadFails?: number; // 候補の保存を最初の何回か失敗させる
+  recordFails?: boolean;
 };
 
 function fakes(world: World = {}) {
@@ -35,11 +39,20 @@ function fakes(world: World = {}) {
       used += 1;
       return json([{ allowed: true, used }]);
     }
-    if (url.includes("rpc/record_image_generation")) { calls.push({ kind: "record", detail: "", body }); return new Response(null, { status: 204 }); }
+    if (url.includes("rpc/record_image_generation")) {
+      calls.push({ kind: "record", detail: "", body });
+      return world.recordFails ? json({ message: "db down" }, 500) : new Response(null, { status: 204 });
+    }
+    if (url.includes("/storage/v1/object/uploads-private/") && (world.uploadFails ?? 0) > 0) {
+      world.uploadFails! -= 1;
+      return json({ message: "storage down" }, 500);
+    }
     if (url.includes("/storage/v1/object/sign/")) return json({ signedURL: `/object/sign/${url.split("/object/sign/")[1]}?token=t` });
     if (url.includes("/storage/v1/object/uploads-private/")) { calls.push({ kind: "upload", detail: url.split("uploads-private/")[1] }); return json({ Key: "k" }); }
     if (url.endsWith("/storage/v1/object/uploads-private") && init?.method === "DELETE") { calls.push({ kind: "delete", detail: "", body }); return json([]); }
-    if (url.includes("/rest/v1/image_generations?select=tenant_id")) return json(url.includes("unknown") ? [] : [{ tenant_id: url.includes("other") ? "t2" : "t1" }]);
+    if (url.includes("/rest/v1/image_generations?select=tenant_id")) {
+      return json(url.includes(UNKNOWN_GENERATION) ? [] : [{ tenant_id: url.includes(OTHER_TENANT_GENERATION) ? "t2" : "t1" }]);
+    }
     if (url.includes("generativelanguage.googleapis.com")) {
       calls.push({ kind: "gemini", detail: url, body });
       return world.gemini === "error" ? json({ error: {} }, 500) : json({ candidates: [{ content: { parts: [{ text: "cherry blossom path, watercolor" }] } }] });
@@ -143,6 +156,20 @@ describe("POST /api/image-generations", () => {
     expect(f.calls.filter((c) => c.kind === "upload").map((c) => c.detail)).toEqual(["t1/candidates/gen-1/1.jpg", "t1/candidates/gen-1/2.jpg"]);
   });
 
+  it("AC-005-01 候補の保存が1枚失敗しても、保存できた分を位置 1 から詰めて記録する", async () => {
+    const f = fakes({ uploadFails: 1 });
+    const body = await (await generate(f)).json() as { candidates: { position: number }[] };
+    expect(body.candidates.map((c) => c.position)).toEqual([1, 2, 3]);
+    expect(f.calls.find((c) => c.kind === "record")!.body).toMatchObject({ p_candidate_count: 3 });
+  });
+
+  it("BR-005-11 記録に失敗したら、保存した候補を消してから失敗にする（記録の無い候補を残さない）", async () => {
+    const f = fakes({ recordFails: true });
+    expect((await generate(f)).status).toBe(500);
+    const deleted = f.calls.find((c) => c.kind === "delete")!.body as { prefixes: string[] };
+    expect(deleted.prefixes).toEqual([1, 2, 3, 4].map((p) => `t1/candidates/gen-1/${p}.jpg`));
+  });
+
   it("AC-005-15 編集者も管理者も画像生成できる。メンバーでなければ 403", async () => {
     expect((await generate(fakes({ role: "EDITOR" }))).status).toBe(201);
     expect((await generate(fakes({ role: "ADMIN" }))).status).toBe(201);
@@ -158,17 +185,20 @@ describe("POST /api/image-generations", () => {
 });
 
 describe("POST /api/image-generations/{id}/clear", () => {
+  const OWN = "0b9e7c1e-0000-4000-8000-000000000009";
+
   it("AC-005-12 採用の操作を終えたら、その画像生成の候補の画像を消す（何度呼んでもよい）", async () => {
     const f = fakes();
-    expect((await f.post("/api/image-generations/gen-9/clear")).status).toBe(204);
-    expect((await f.post("/api/image-generations/gen-9/clear")).status).toBe(204);
-    expect(f.calls.find((c) => c.kind === "delete")!.body).toEqual({ prefixes: [1, 2, 3, 4].map((p) => `t1/candidates/gen-9/${p}.jpg`) });
+    expect((await f.post(`/api/image-generations/${OWN}/clear`)).status).toBe(204);
+    expect((await f.post(`/api/image-generations/${OWN}/clear`)).status).toBe(204);
+    expect(f.calls.find((c) => c.kind === "delete")!.body).toEqual({ prefixes: [1, 2, 3, 4].map((p) => `t1/candidates/${OWN}/${p}.jpg`) });
   });
 
-  it("ほかの団体の画像生成は 403、無ければ 404", async () => {
+  it("ほかの団体の画像生成は 403、無ければ 404、画像生成IDの形でなければ問い合わせずに 404", async () => {
     const f = fakes();
-    expect((await f.post("/api/image-generations/other/clear")).status).toBe(403);
-    expect((await f.post("/api/image-generations/unknown/clear")).status).toBe(404);
+    expect((await f.post(`/api/image-generations/${OTHER_TENANT_GENERATION}/clear`)).status).toBe(403);
+    expect((await f.post(`/api/image-generations/${UNKNOWN_GENERATION}/clear`)).status).toBe(404);
+    expect((await f.post("/api/image-generations/not-a-uuid/clear")).status).toBe(404);
   });
 });
 

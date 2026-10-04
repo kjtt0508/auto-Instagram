@@ -101,7 +101,7 @@ export function MediaPicker({ tenant, media, onChange }: {
           </div>
         )}
       </GroupedSection>
-      {generating && <ImageGenerationSheet onChoose={adopt} onClose={() => setGenerating(false)} />}
+      {generating && <ImageGenerationSheet maxChoices={media.remainingSlots()} onChoose={adopt} onClose={() => setGenerating(false)} />}
     </>
   );
 }
