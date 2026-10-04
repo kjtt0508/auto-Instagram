@@ -1,0 +1,8 @@
+# Cloudflare Pages（niijima-ig）の設定。秘密の値（Secret）はここに書かず `wrangler pages secret put` で入れる
+name = "niijima-ig"
+pages_build_output_dir = "out"
+compatibility_date = "2026-09-01"
+
+# 画像生成（REQ-005、ADR-0008）: API関数から Workers AI を呼ぶ。キーは要らない
+[ai]
+binding = "AI"

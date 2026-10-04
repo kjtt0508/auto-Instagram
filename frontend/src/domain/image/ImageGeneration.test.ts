@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import styleFixture from "../../../../docs/model/fixtures/image-style.json";
 import { ImageStyle } from "../post/ImageStyle";
 import { ImageCandidate } from "./ImageCandidate";
+import { ImageGeneration } from "./ImageGeneration";
 import { ImageGenerationQuota } from "./ImageGenerationQuota";
 import { ImageGenerationUsage } from "./ImageGenerationUsage";
 import { ImagePrompt } from "./ImagePrompt";
@@ -68,7 +70,28 @@ describe("画像の種類（BR-005-01 の表）", () => {
     expect([generated.candidatePosition, generated.style, generated.requiresAiDisclosure()]).toEqual([3, ImageStyle.PHOTOREALISTIC, true]);
   });
 
+  it.each(styleFixture.styles)("BR-005-01 $code の振る舞い（fixtures/image-style.json）", (c) => {
+    const style = ImageStyle.from(c.code);
+    expect([style.showsCaution(), style.needsApprovalCheck(), style.requiresAiDisclosure()])
+      .toEqual([c.showsCaution, c.needsApprovalCheck, c.requiresAiDisclosure]);
+  });
+
   it("候補の位置は1〜4", () => {
     expect(() => ImageCandidate.of({ generationId: "g1", position: 5, style: ImageStyle.ILLUSTRATION })).toThrow();
+  });
+});
+
+describe("画像生成の結果", () => {
+  const generationOf = (candidateCount: number) => ImageGeneration.of({
+    id: "g1", style: ImageStyle.ILLUSTRATION, prompt: ImagePrompt.of("桜"), translatedPrompt: "cherry blossoms", candidateCount });
+
+  it.each([[4, "SUCCEEDED", 4], [2, "SUCCEEDED", 2], [0, "FAILED", 0]])("AC-005-07 候補 %i 枚 → %s、候補は %i 件", (count, outcome, candidates) => {
+    const generation = generationOf(count as number);
+    expect(generation.outcome()).toBe(outcome);
+    expect(generation.candidates().map((c) => c.position)).toEqual(Array.from({ length: candidates as number }, (_, i) => i + 1));
+  });
+
+  it("AC-005-14 英訳した指示が無い画像生成は作れない（記録しない）", () => {
+    expect(() => ImageGeneration.of({ id: "g1", style: ImageStyle.ILLUSTRATION, prompt: ImagePrompt.of("桜"), translatedPrompt: " ", candidateCount: 4 })).toThrow();
   });
 });

@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import vector from "../../../docs/model/fixtures/token-cipher.json";
 import { AccessToken } from "../../src/domain/connection/AccessToken";
-import { connectingAssembly, type ApiEnv } from "../connection/infrastructure/connectingAssembly";
 import { TokenCipher } from "../connection/infrastructure/tokenCipher";
+import { apiAssembly, type ApiEnv } from "../shared/infrastructure/apiAssembly";
 import { createApiApp as createApp } from "./apiApp";
 
-const createApiApp = (http: typeof fetch) => createApp(connectingAssembly(http));
+const createApiApp = (http: typeof fetch) => createApp(apiAssembly(http));
 
 const env: ApiEnv = {
   SUPABASE_URL: "https://db.test", SUPABASE_SERVICE_ROLE_KEY: "service-role", TOKEN_ENC_KEY_V1: vector.keyBase64,
   IG_APP_ID: "app", IG_APP_SECRET: "secret", IG_REDIRECT_URI: "https://admin.test/api/instagram/callback", IG_API_VERSION: "v23.0",
+  GEMINI_API_KEY: "gemini-key", AI: { run: async () => ({}) },
 };
 const LONG_TOKEN = "IGAA-long-lived-secret";
 

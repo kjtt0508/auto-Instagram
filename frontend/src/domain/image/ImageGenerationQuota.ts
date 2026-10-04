@@ -2,7 +2,7 @@
 export class ImageGenerationQuota {
   private constructor(
     readonly dailyLimit: number,
-    private readonly warnRatio: number,
+    readonly warnRatio: number,
   ) {}
 
   static of(dailyLimit: number, warnRatio: number): ImageGenerationQuota {
