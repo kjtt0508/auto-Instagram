@@ -10,7 +10,7 @@ import { approve } from "@/lib/api/postCommands";
 
 const DEFAULT_AHEAD_MS = 24 * 60 * 60 * 1000;
 
-/** 日時を選んで承認する（承認者・管理者。AC-001-10, 11）。確定時点で未来かつ1年以内 */
+/** 日時を選んで承認する（承認者・管理者。AC-001-10, 11）。確定時点で未来かつ1年以内。写真風の生成画像を含むなら確認を出す（AC-005-08） */
 export function ApproveForm({ post, onDone }: { post: Post; onDone: () => void }) {
   const [localValue, setLocalValue] = useState(() => toJapanLocalInput(new Date(Date.now() + DEFAULT_AHEAD_MS)).slice(0, 11) + "18:00");
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +28,11 @@ export function ApproveForm({ post, onDone }: { post: Post; onDone: () => void }
 
   return (
     <GroupedSection title="承認して予約" footer="定期処理は15分ごとのため、公開は指定の時刻から最大15分ほど遅れます">
+      {post.needsGeneratedImageCheck() && (
+        <p role="note" className="border-b border-separator px-4 py-3 text-[15px] text-destructive">
+          写真風の生成画像を含みます。実際の出来事・場所・人の写真として使っていないか、実在の人物・商標が写っていないか確認してください
+        </p>
+      )}
       <label className="flex min-h-11 items-center justify-between gap-3 px-4 py-1.5" htmlFor="scheduled-at">
         <span>公開日時</span>
         <input id="scheduled-at" type="datetime-local" value={localValue} onChange={(e) => setLocalValue(e.target.value)}

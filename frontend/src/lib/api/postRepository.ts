@@ -1,5 +1,6 @@
 import { Caption } from "@/domain/post/Caption";
 import { FailureReason } from "@/domain/post/FailureReason";
+import { GeneratedImage } from "@/domain/post/GeneratedImage";
 import { Post } from "@/domain/post/Post";
 import { PostEvent } from "@/domain/post/PostEvent";
 import { PostFormat } from "@/domain/post/PostFormat";
@@ -21,7 +22,10 @@ export type PostRow = {
   published_at: string | null; last_failure_kind: string | null; last_failure_message: string | null;
 };
 
-type MediaRow = { position: number; storage_path: string; width: number; height: number; byte_size: number };
+type MediaRow = {
+  position: number; storage_path: string; width: number; height: number; byte_size: number;
+  generation_id: string | null; candidate_position: number | null; style: string | null;
+};
 
 export function toPost(row: PostRow, media: PostMediaList = PostMediaList.empty()): Post {
   const status = PostStatus.from(row.status);
@@ -44,14 +48,18 @@ export async function findPost(postId: string): Promise<Post | null> {
   const row = unwrapOptional(await supabase().from("post_current").select(POST_COLUMNS).eq("post_id", postId)
     .maybeSingle<PostRow>());
   if (!row) return null;
-  const mediaRows = unwrap(await supabase().from("post_media")
-    .select("position, storage_path, width, height, byte_size").eq("revision_id", row.revision_id).order("position"));
+  // 投稿画像は生成画像の由来つきで読む（post_media_origin。REQ-005 設計 5章）
+  const mediaRows = unwrap(await supabase().from("post_media_origin")
+    .select("position, storage_path, width, height, byte_size, generation_id, candidate_position, style")
+    .eq("revision_id", row.revision_id).order("position"));
   return toPost(row, PostMediaList.of((mediaRows as MediaRow[]).map(toMedia)));
 }
 
 function toMedia(row: MediaRow): PostMedia {
+  const generated = row.generation_id && row.candidate_position && row.style
+    ? GeneratedImage.of({ generationId: row.generation_id, candidatePosition: row.candidate_position, styleCode: row.style }) : null;
   return PostMedia.of({ position: row.position, storagePath: row.storage_path, width: row.width,
-    height: row.height, bytes: row.byte_size });
+    height: row.height, bytes: row.byte_size, generated });
 }
 
 /** 投稿履歴（古い順） */

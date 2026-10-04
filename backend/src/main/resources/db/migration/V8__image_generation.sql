@@ -59,7 +59,7 @@ end $$;
 
 -- 投稿画像が生成画像か（どの画像生成の何番目か・画像の種類）を導出する。投稿画像にカラムは足さない（P31）
 create view post_media_origin with (security_invoker = true) as
-select pm.id as post_media_id, pm.revision_id, pm.position, pm.storage_path,
+select pm.id as post_media_id, pm.revision_id, pm.position, pm.storage_path, pm.width, pm.height, pm.byte_size,
        ca.generation_id, ca.candidate_position, ig.style
 from post_media pm
 left join candidate_adoptions ca on ca.post_media_id = pm.id

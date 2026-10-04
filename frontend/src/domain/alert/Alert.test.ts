@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InstagramConnection } from "../connection/InstagramConnection";
+import { ImageGenerationQuota } from "../image/ImageGenerationQuota";
+import { ImageGenerationUsage } from "../image/ImageGenerationUsage";
 import { BatchHeartbeat } from "../job/BatchHeartbeat";
 import { Alert } from "./Alert";
 
@@ -43,6 +45,15 @@ describe("警告の導出（BR-001-12）", () => {
       ["CONNECTION_MISSING", "/settings/"],
       ["PUBLISH_FAILED", "/posts/view/?id=p1"],
     ]);
+  });
+
+  it("AC-005-06 画像生成の回数が上限20回の8割（16回）に近づいたら注意、20回で到達。15回までは出さない", () => {
+    const withUsage = (used: number) => codes({ connection: connection(50), latestHeartbeat: minutesAgo(1), failedPostIds: [],
+      imageGenerationUsage: ImageGenerationUsage.of(used, ImageGenerationQuota.of(20, 0.8)) });
+    expect(withUsage(15)).toEqual([]);
+    expect(withUsage(16)).toEqual(["IMAGE_LIMIT_NEAR"]);
+    expect(withUsage(19)).toEqual(["IMAGE_LIMIT_NEAR"]);
+    expect(withUsage(20)).toEqual(["IMAGE_LIMIT_REACHED"]);
   });
 
   it("エラーが注意より先に並ぶ", () => {

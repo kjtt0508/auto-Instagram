@@ -3,6 +3,7 @@ import { InstagramConnection } from "@/domain/connection/InstagramConnection";
 import { BatchHeartbeat } from "@/domain/job/BatchHeartbeat";
 import type { Post } from "@/domain/post/Post";
 import { PostStatus } from "@/domain/post/PostStatus";
+import { imageGenerationUsage } from "./imageGenerationApi";
 import { POST_COLUMNS, toPost, type PostRow } from "./postRepository";
 import { supabase, unwrap } from "./supabase";
 
@@ -21,8 +22,9 @@ type ConnectionRow = { ig_username: string; token_expires_at: string; last_refre
 
 /** いま出すべき警告（BR-001-12。記録から導出し保存しない） */
 export async function currentAlerts(now: Date) {
-  const [connection, heartbeat, failed] = await Promise.all([connectionStatus(), latestTickHeartbeat(), failedPostIds()]);
-  return Alert.detect({ connection, latestHeartbeat: heartbeat, failedPostIds: failed }, now);
+  const [connection, heartbeat, failed, usage] = await Promise.all([connectionStatus(), latestTickHeartbeat(), failedPostIds(),
+    imageGenerationUsage()]);
+  return Alert.detect({ connection, latestHeartbeat: heartbeat, failedPostIds: failed, imageGenerationUsage: usage }, now);
 }
 
 async function latestTickHeartbeat(): Promise<BatchHeartbeat | null> {

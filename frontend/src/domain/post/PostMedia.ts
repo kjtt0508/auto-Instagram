@@ -54,9 +54,11 @@ export class PostMedia {
     return this.generated?.needsApprovalCheck() ?? false;
   }
 
-  /** RPC save_post_revision に渡す形（REQ-001 設計 4章） */
+  /** RPC save_post_revision に渡す形（REQ-001 設計 4章）。生成画像なら候補の参照を付ける（REQ-005: 版の保存と同時に候補の採用を記録） */
   toRevisionMedia() {
-    return { position: this.position, storagePath: this.storagePath, width: this.size.width,
+    const media = { position: this.position, storagePath: this.storagePath, width: this.size.width,
       height: this.size.height, byteSize: this.size.bytes };
+    if (!this.generated) return media;
+    return { ...media, generation: { generationId: this.generated.generationId, candidatePosition: this.generated.candidatePosition } };
   }
 }
