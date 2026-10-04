@@ -25,3 +25,5 @@
 ## 結果
 - ハーネスの lint が UPDATE を指摘した場合は、`image_generation_usage_daily` に限り `harness-allow: P18 ADR-0009` を付ける
 - 候補の画像を消したこと自体は記録しない（画像生成の記録と、採用の記録が無いことで十分に追える）
+- 片付け（採用の操作を終えた・閉じた）で消せなかった候補は、daily が「画像生成から24時間を過ぎた」ものを消す（選んでいる最中の候補を消さないため）
+- カウンタの「日」は SQL で `(now() at time zone 'UTC')::date` と明示し（`current_date` はセッションのタイムゾーンに左右される）、確保と参照の両方で同じ関数（`app.image_generation_day()`）を使う

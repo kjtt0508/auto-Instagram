@@ -24,6 +24,16 @@ export class PostMediaList {
     return this.media;
   }
 
+  /** 写真風の生成画像を1枚でも含むか（公開時にAI生成の表示を付ける。REQ-005 BR-005-05） */
+  requiresAiDisclosure(): boolean {
+    return this.media.some((m) => m.requiresAiDisclosure());
+  }
+
+  /** 承認時に「写真風の生成画像を含みます」の確認を出すか（AC-005-08） */
+  needsApprovalCheck(): boolean {
+    return this.media.some((m) => m.needsApprovalCheck());
+  }
+
   /** 枚数に合う投稿種別（1枚なら画像、2枚以上ならカルーセル） */
   format(): PostFormat {
     return PostFormat.forMediaCount(this.count());

@@ -15,7 +15,8 @@ REQ-005 で、指示から投稿画像の候補を作る。月額0円（NFR-001-
   - モデルは Apache 2.0。生成物の商用利用可（Hugging Face のモデルカード、2026-10-04 確認）
 - 呼び出しは **API関数（Pages Functions）に Workers AI の AI バインディングを付けて**行う（`frontend/wrangler.toml` の `[ai]`）。API キーが要らず、ブラウザに鍵を出さない（NFR-005-01）
 - 指示は **Gemini（テキスト生成、無料枠）で英訳**してから渡す。日本語のままでは内容が反映されない・NSFW と誤判定される（2026-10-04 試作）
-- 提供元とモデル名は団体の設定（`image_generation_settings`）で持ち、コードは `ImageGenerator`（提供元とモデル）のインターフェースを通して呼ぶ（BR-005-12）。別の提供元に替えるときは infrastructure に実装を足す
+- 提供元とモデル名は団体の設定（`image_generation_settings`。用語集の `ImageGenerator` = 提供元とモデル名の組）で持ち、呼び出しは application のインターフェース `CandidateImageClient` を通す（BR-005-12）。別の提供元に替えるときは infrastructure に実装を足す
+- 英訳は 15秒、画像生成は全体 60秒の残りの時間で打ち切る
 
 ## 検討した代替案
 - Gemini の画像生成（Imagen / Gemini Flash Image）: 品質と日本語の理解は高いが、無料枠が無い（NFR-001-01 に反する）

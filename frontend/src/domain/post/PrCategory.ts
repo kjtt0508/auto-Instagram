@@ -1,5 +1,3 @@
-import { Caption } from "./Caption";
-
 /** PR区分: 対価を受けた広告かどうか。PR案件は公開時にPR表記を先頭に付ける（ステマ規制への対応） */
 export class PrCategory {
   static readonly NONE = new PrCategory("NONE", "通常", false);
@@ -25,17 +23,8 @@ export class PrCategory {
     return this.labelRequired;
   }
 
-  /** 公開用キャプションを作る（PR案件だけPR表記を付ける）。上限を超えるなら例外 */
-  applyLabel(caption: Caption, prLabel: string): Caption {
-    if (!this.labelRequired) return caption;
-    return caption.prefixed(prLabel);
-  }
-
-  /** PR表記を付けると上限を超えるときの説明（空なら公開できる） */
-  violationsWithLabel(caption: Caption, prLabel: string): string[] {
-    if (!this.labelRequired || caption.fitsWhenPrefixed(prLabel)) return [];
-    const length = caption.lengthWhenPrefixed(prLabel).toLocaleString("ja-JP");
-    const max = Caption.MAX_LENGTH.toLocaleString("ja-JP");
-    return [`PR表記を含めて${max}文字以内にしてください（${length}文字）`];
+  /** 公開用キャプションの先頭に付ける表記（PR案件だけPR表記、通常は空） */
+  labelPrefix(prLabel: string): string {
+    return this.labelRequired ? prLabel : "";
   }
 }

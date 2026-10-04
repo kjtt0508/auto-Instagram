@@ -1,5 +1,5 @@
 {
-  "$comment": "キャプション・PR区分の共通テストケース（ADR-0005）。text は segments を連結して作る（repeat を count 回）。文字数はコードポイントで数える。violation（画面の文言）は TS だけが比べる",
+  "$comment": "キャプション・PR区分・AI生成の表示の共通テストケース（ADR-0005）。aiDisclosure=true は写真風の生成画像を含む投稿（REQ-005）。text は segments を連結して作る（repeat を count 回）。文字数はコードポイントで数える。violation（画面の文言）は TS だけが比べる",
   "prLabel": "【PR】\n",
   "cases": [
     { "id": "AC-001-08", "name": "2,200文字は保存できる", "segments": [{ "repeat": "あ", "count": 2200 }], "prCategory": "NONE", "valid": true, "publishValid": true },
@@ -10,6 +10,10 @@
     { "id": "BR-001-05", "name": "絵文字は1文字と数える", "segments": [{ "repeat": "😀", "count": 2200 }], "prCategory": "NONE", "valid": true, "publishValid": true },
     { "id": "AC-001-09", "name": "PR案件2,196文字はPR表記込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2196 }], "prCategory": "PR", "valid": true, "publishValid": false, "violation": "PR表記を含めて2,200文字以内にしてください（2,201文字）" },
     { "id": "AC-001-09", "name": "PR案件2,195文字はPR表記込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2195 }], "prCategory": "PR", "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "length": 2200 } },
-    { "id": "BR-001-05", "name": "通常の投稿にはPR表記を付けない", "segments": [{ "repeat": "あ", "count": 10 }], "prCategory": "NONE", "valid": true, "publishValid": true, "publishText": { "prefix": "", "length": 10 } }
+    { "id": "BR-001-05", "name": "通常の投稿にはPR表記を付けない", "segments": [{ "repeat": "あ", "count": 10 }], "prCategory": "NONE", "valid": true, "publishValid": true, "publishText": { "prefix": "", "length": 10 } },
+    { "id": "AC-005-04", "name": "写真風の生成画像を含む本文2,182文字はAI生成の表示込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2182 }], "prCategory": "NONE", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "", "suffix": "\n※画像はAIで生成したイメージです", "length": 2200 } },
+    { "id": "AC-005-04", "name": "写真風の生成画像を含む本文2,183文字はAI生成の表示込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2183 }], "prCategory": "NONE", "aiDisclosure": true, "valid": true, "publishValid": false, "violation": "AI生成の表示を含めて2,200文字以内にしてください（2,201文字）" },
+    { "id": "AC-005-10", "name": "PR案件で写真風の生成画像を含む本文2,177文字は両方の付記込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2177 }], "prCategory": "PR", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "suffix": "\n※画像はAIで生成したイメージです", "length": 2200 } },
+    { "id": "AC-005-10", "name": "PR案件で写真風の生成画像を含む本文2,178文字は両方の付記込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2178 }], "prCategory": "PR", "aiDisclosure": true, "valid": true, "publishValid": false, "violation": "PR表記とAI生成の表示を含めて2,200文字以内にしてください（2,201文字）" }
   ]
 }

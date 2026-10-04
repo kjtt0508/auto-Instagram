@@ -14,7 +14,7 @@
 - 定期処理は、公開の直前に画像仕様・枚数と、PR入稿由来の投稿のPR区分（ステマ対策）を再検証する（画面の検証を信用しすぎない）。
 - **DB に置くのは遷移表（出来事の種類と遷移の組）・版の固定・値域（区分の CHECK）・正の数・一意だけ**。画像仕様（幅・比率・容量）や文字数のような業務ルールは DB の CHECK にしない（変更のたびにマイグレーションが要り、4〜5重になるため）。
 
-二重実装の対象: `PostStatus`、`PostFormat`、`PostMediaList`、`ImageSpec`、`Caption`、`PrCategory`、`IdeaSource`（PR区分の固定）、`ScheduledAt`、`TokenExpiry`、`FailureKind`（guidance のみ TS）、`Template.fill`、`DraftProposal`、`GenerationRetryPolicy`、トークンの暗号化（ADR-0007）。
+二重実装の対象: `PostStatus`、`PostFormat`、`PostMediaList`、`ImageSpec`、`Caption`、`PrCategory`、`IdeaSource`（PR区分の固定）、`ScheduledAt`、`TokenExpiry`、`FailureKind`（guidance のみ TS）、`Template.fill`、`DraftProposal`、`GenerationRetryPolicy`、トークンの暗号化（ADR-0007）、`ImageStyle`・`GeneratedImage`・`AiDisclosure` と公開用キャプションの付記（REQ-005。2026-10-04 追加。`fixtures/caption.json`・`fixtures/image-style.json`）。
 
 ## 検討した代替案
 - ルールを DB 関数（PL/pgSQL）に寄せる: 1か所になるが、業務ロジックが DB に散らばり、テストもしにくい（P16）。

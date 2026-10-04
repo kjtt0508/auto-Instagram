@@ -45,18 +45,18 @@ export class Caption {
     return Hashtag.countIn(this.text);
   }
 
-  /** 先頭に文字列を付けた新しいキャプション（付けた結果も上限を守る。守れなければ例外） */
-  prefixed(prefix: string): Caption {
-    return Caption.of(prefix + this.text);
+  /** 先頭と末尾に付記（PR表記・AI生成の表示）を付けた新しいキャプション（付けた結果も上限を守る。守れなければ例外） */
+  withNotices(prefix: string, suffix: string): Caption {
+    return Caption.of(prefix + this.text + suffix);
   }
 
-  /** 先頭に付けても上限に収まるか */
-  fitsWhenPrefixed(prefix: string): boolean {
-    return this.lengthWhenPrefixed(prefix) <= Caption.MAX_LENGTH;
+  /** 付記を付けても上限に収まるか */
+  fitsWithNotices(prefix: string, suffix: string): boolean {
+    return this.lengthWithNotices(prefix, suffix) <= Caption.MAX_LENGTH;
   }
 
-  /** 先頭に付けたときの文字数 */
-  lengthWhenPrefixed(prefix: string): number {
-    return [...prefix].length + this.length();
+  /** 付記を付けたときの文字数 */
+  lengthWithNotices(prefix: string, suffix: string): number {
+    return [...prefix].length + this.length() + [...suffix].length;
   }
 }

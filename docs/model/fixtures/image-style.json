@@ -1,0 +1,7 @@
+{
+  "$comment": "画像の種類ごとの振る舞いの共通テストケース（ADR-0005、REQ-005 BR-005-01 の表）。TS と Java の ImageStyle が読む",
+  "styles": [
+    { "code": "ILLUSTRATION", "showsCaution": false, "needsApprovalCheck": false, "requiresAiDisclosure": false },
+    { "code": "PHOTOREALISTIC", "showsCaution": true, "needsApprovalCheck": true, "requiresAiDisclosure": true }
+  ]
+}
