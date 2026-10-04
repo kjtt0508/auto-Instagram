@@ -66,6 +66,9 @@ class SharedFixtureCasesTest {
 		assertThat(published.text()).startsWith(expected.get("prefix").asString())
 				.endsWith(expected.path("suffix").asString(""));
 		assertThat(published.text().codePointCount(0, published.text().length())).isEqualTo(expected.get("length").asInt());
+		if (expected.has("text")) {
+			assertThat(published.text()).isEqualTo(expected.get("text").asString());
+		}
 	}
 
 	@ParameterizedTest(name = "{0}")

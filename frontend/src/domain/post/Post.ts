@@ -1,12 +1,13 @@
 import type { Role } from "../member/Role";
-import { AiDisclosure } from "./AiDisclosure";
 import { Caption } from "./Caption";
 import type { FailureReason } from "./FailureReason";
 import { ImageSpec } from "./ImageSpec";
 import type { PostFormat } from "./PostFormat";
 import type { PostMediaList } from "./PostMediaList";
+import { PostRevision } from "./PostRevision";
 import { PostStatus } from "./PostStatus";
 import type { PrCategory } from "./PrCategory";
+import type { PublishCaption } from "./PublishCaption";
 import type { PublishResult } from "./PublishResult";
 import type { ScheduledAt } from "./ScheduledAt";
 
@@ -38,29 +39,15 @@ export class Post {
   static violationsForApprovalRequest(content: {
     readonly format: PostFormat; readonly media: PostMediaList; readonly captionText: string; readonly prCategory: PrCategory;
   }, prLabel: string): string[] {
-    const captionViolations = Caption.violationsOf(content.captionText);
     const media = content.media.violationsFor(content.format, new ImageSpec());
-    if (captionViolations.length > 0) return [...media, ...captionViolations];
-    return [...media, ...Post.noticeViolations(Caption.of(content.captionText), Post.noticesOf(content, prLabel))];
+    const revision = PostRevision.ofPhotos({ caption: Caption.restore(content.captionText), prCategory: content.prCategory, media: content.media });
+    return [...media, ...revision.violationsForApproval(prLabel)];
   }
 
-  /**
-   * 公開用キャプションの付記（先頭のPR表記・末尾のAI生成の表示）。付記の組み立てはここ1か所だけ（REQ-005 設計 2章）。
-   * Java の Post.publishCaption と揃える（docs/model/fixtures/caption.json）
-   */
-  static noticesOf(content: { readonly media: PostMediaList; readonly prCategory: PrCategory }, prLabel: string) {
-    const prefix = content.prCategory.labelPrefix(prLabel);
-    const disclosure = AiDisclosure.of(content.media);
-    const names = [...(prefix ? [Post.PR_LABEL_NAME] : []), ...(disclosure.isRequired() ? [AiDisclosure.NAME] : [])];
-    return { prefix, suffix: disclosure.suffix(), names };
-  }
-
-  private static readonly PR_LABEL_NAME = "PR表記";
-
-  private static noticeViolations(caption: Caption, notices: { prefix: string; suffix: string; names: string[] }): string[] {
-    if (caption.fitsWithNotices(notices.prefix, notices.suffix)) return [];
-    const length = caption.lengthWithNotices(notices.prefix, notices.suffix).toLocaleString("ja-JP");
-    return [`${notices.names.join("と")}を含めて${Caption.MAX_LENGTH.toLocaleString("ja-JP")}文字以内にしてください（${length}文字）`];
+  /** この投稿（最新の版）の内容を表す投稿の版（写真をアップロードした投稿。テンプレートの投稿への対応は REQ-002 の画面の単位で） */
+  revision(): PostRevision {
+    const { caption, prCategory, media } = this.content;
+    return PostRevision.ofPhotos({ caption, prCategory, media });
   }
 
   /** この投稿（最新の版）で承認を依頼できない理由 */
@@ -70,14 +57,13 @@ export class Post {
   }
 
   /** 公開用のキャプション（PR案件ならPR表記、写真風の生成画像を含むならAI生成の表示付き）。プレビューに使う */
-  publishCaption(prLabel: string): Caption {
-    const notices = Post.noticesOf(this.content, prLabel);
-    return this.content.caption.withNotices(notices.prefix, notices.suffix);
+  publishCaption(prLabel: string): PublishCaption {
+    return this.revision().publishCaption(prLabel);
   }
 
   /** 承認時に「写真風の生成画像を含みます」の確認を出すか（AC-005-08） */
   needsGeneratedImageCheck(): boolean {
-    return this.content.media.needsApprovalCheck();
+    return this.revision().needsApprovalCheck();
   }
 
   /** カレンダーに載せる日時（公開済みなら公開日時、それ以外は予約日時。どちらも無ければ null） */

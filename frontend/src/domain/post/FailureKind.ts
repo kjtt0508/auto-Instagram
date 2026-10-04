@@ -9,6 +9,8 @@ export class FailureKind {
     "画像や内容に不備があります。下書きに戻して直してください");
   static readonly GRACE_EXCEEDED = new FailureKind("GRACE_EXCEEDED", "公開猶予切れ",
     "公開予定から時間が経ちすぎました。日時を決めて再実行してください");
+  static readonly RENDER_FAILED = new FailureKind("RENDER_FAILED", "画像化の失敗",
+    "画像化に失敗しました。今すぐ再実行でやり直せます");
   static readonly UNKNOWN = new FailureKind("UNKNOWN", "不明",
     "原因が分かりません。Instagramで公開されていないか確認してから再実行してください");
 
@@ -20,7 +22,7 @@ export class FailureKind {
 
   static all(): readonly FailureKind[] {
     return [FailureKind.TRANSIENT, FailureKind.RATE_LIMITED, FailureKind.TOKEN_INVALID,
-      FailureKind.MEDIA_REJECTED, FailureKind.GRACE_EXCEEDED, FailureKind.UNKNOWN];
+      FailureKind.MEDIA_REJECTED, FailureKind.GRACE_EXCEEDED, FailureKind.RENDER_FAILED, FailureKind.UNKNOWN];
   }
 
   static from(code: string): FailureKind {

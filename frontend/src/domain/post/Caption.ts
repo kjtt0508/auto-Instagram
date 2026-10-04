@@ -2,7 +2,10 @@ import { Hashtag } from "./Hashtag";
 
 const formatCount = (n: number): string => n.toLocaleString("ja-JP");
 
-/** キャプション: 投稿の本文（ハッシュタグを含む）。2,200文字以下（コードポイントで数える）、ハッシュタグ30個以下 */
+/**
+ * キャプション: 人や AI が書く投稿の本文（ハッシュタグを含んでよい）。2,200文字以下（コードポイントで数える）、ハッシュタグ30個以下。
+ * 付記・キャプションの定型・ハッシュタグを足した上限は公開用キャプション（PublishCaption）が確かめる
+ */
 export class Caption {
   static readonly MAX_LENGTH = 2200;
   static readonly MAX_HASHTAGS = 30;
@@ -43,20 +46,5 @@ export class Caption {
 
   hashtagCount(): number {
     return Hashtag.countIn(this.text);
-  }
-
-  /** 先頭と末尾に付記（PR表記・AI生成の表示）を付けた新しいキャプション（付けた結果も上限を守る。守れなければ例外） */
-  withNotices(prefix: string, suffix: string): Caption {
-    return Caption.of(prefix + this.text + suffix);
-  }
-
-  /** 付記を付けても上限に収まるか */
-  fitsWithNotices(prefix: string, suffix: string): boolean {
-    return this.lengthWithNotices(prefix, suffix) <= Caption.MAX_LENGTH;
-  }
-
-  /** 付記を付けたときの文字数 */
-  lengthWithNotices(prefix: string, suffix: string): number {
-    return [...prefix].length + this.length() + [...suffix].length;
   }
 }

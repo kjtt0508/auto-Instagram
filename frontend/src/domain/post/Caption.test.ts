@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../../../docs/model/fixtures/caption.json";
+import { sampleBody, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
 import { Caption } from "./Caption";
 import { GeneratedImage } from "./GeneratedImage";
 import { Post } from "./Post";
 import { PostFormat } from "./PostFormat";
 import { PostMedia } from "./PostMedia";
 import { PostMediaList } from "./PostMediaList";
+import { PostRevision } from "./PostRevision";
 import { PostStatus } from "./PostStatus";
 import { PrCategory } from "./PrCategory";
 
@@ -44,6 +46,7 @@ describe("キャプション・PR表記・AI生成の表示（fixtures/caption.j
     expect(published.text.startsWith(c.publishText!.prefix)).toBe(true);
     expect(published.text.endsWith(c.publishText!.suffix ?? "")).toBe(true);
     expect(published.length()).toBe(c.publishText!.length);
+    if (c.publishText!.text !== undefined) expect(published.text).toBe(c.publishText!.text);
   });
 
   it("AC-001-09 PR表記を付けると上限を超えるなら、公開用キャプションは作れない", () => {
@@ -53,7 +56,9 @@ describe("キャプション・PR表記・AI生成の表示（fixtures/caption.j
   it("AC-005-05 背景・イラストの生成画像だけならAI生成の表示は付かない", () => {
     const media = PostMediaList.of([PostMedia.of({ position: 1, storagePath: "t/posts/1.jpg", width: 1080, height: 1350, bytes: 1,
       generated: GeneratedImage.of({ generationId: "g1", candidatePosition: 2, styleCode: "ILLUSTRATION" }) })]);
-    expect(Post.noticesOf({ media, prCategory: PrCategory.NONE }, fixture.prLabel)).toEqual({ prefix: "", suffix: "", names: [] });
+    const revision = PostRevision.ofPhotos({ caption: Caption.of("本文"), prCategory: PrCategory.NONE, media });
+    expect(revision.aiDisclosure().isRequired()).toBe(false);
+    expect(revision.publishCaption(fixture.prLabel).text).toBe("本文");
   });
 
   it("記録から戻すときは上限を検査しない（承認依頼の前に違反として出す）", () => {
@@ -62,5 +67,38 @@ describe("キャプション・PR表記・AI生成の表示（fixtures/caption.j
 
   it("残り文字数を返す", () => {
     expect(Caption.of("あいう").remainingLength()).toBe(2197);
+  });
+});
+
+describe("テンプレートの投稿の公開用キャプション（fixtures/caption.json の templateCases）", () => {
+  const revisionOf = (c: (typeof fixture.templateCases)[number]) => {
+    const body = c.body ?? textOf(c.segments ?? []);
+    const bodies = c.aiDisclosure ? [sampleBody(sampleMaterial("PHOTOREALISTIC"))] : undefined;
+    return PostRevision.ofSlides({
+      caption: Caption.restore(body), prCategory: PrCategory.from(c.prCategory), slides: sampleSlides(bodies),
+      settings: sampleSettings(), additionalHashtags: c.additionalHashtags,
+    });
+  };
+
+  it.each(fixture.templateCases)("$id $name", (c) => {
+    const revision = revisionOf(c);
+    const violations = revision.violationsForApproval(fixture.prLabel);
+    expect(violations.length === 0).toBe(c.publishValid);
+    if (!c.publishValid) {
+      expect(violations).toContain(c.violation);
+      expect(() => revision.publishCaption(fixture.prLabel)).toThrow();
+      return;
+    }
+    const published = revision.publishCaption(fixture.prLabel);
+    if (c.publishText?.text !== undefined) expect(published.text).toBe(c.publishText.text);
+    if (c.publishText?.length !== undefined) expect(published.length()).toBe(c.publishText.length);
+  });
+
+  it("AC-002-18 キャプション本文に使える文字数は、付記・定型・ハッシュタグを除いた分（本文の長さによらない）", () => {
+    const remaining = (body: string, prCategory: PrCategory) => PostRevision.ofSlides({ caption: Caption.restore(body), prCategory,
+      slides: sampleSlides(), settings: sampleSettings(), additionalHashtags: [] }).publishCaption(fixture.prLabel).remainingForCaption();
+    expect(remaining("あ", PrCategory.NONE)).toBe(2114);
+    expect(remaining("あいう", PrCategory.NONE)).toBe(2114);
+    expect(remaining("あ", PrCategory.PR)).toBe(2109);
   });
 });

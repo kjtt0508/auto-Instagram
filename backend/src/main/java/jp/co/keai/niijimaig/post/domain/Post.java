@@ -3,7 +3,6 @@ package jp.co.keai.niijimaig.post.domain;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,42 +53,18 @@ public final class Post {
 		if (prepared.count() != content.media().count()) {
 			violations.add("公開用画像の枚数が承認された版と一致しません");
 		}
-		Notices notices = notices(prLabel);
-		if (!content.caption().fitsWithNotices(notices.prefix(), notices.suffix())) {
-			violations.add(String.format(Locale.JAPAN, "%sを含めて%,d文字以内にしてください（%,d文字）", String.join("と", notices.names()),
-					Caption.MAX_LENGTH, content.caption().lengthWithNotices(notices.prefix(), notices.suffix())));
-		}
+		violations.addAll(content.revision().publishCaption(prLabel).violations());
 		return List.copyOf(violations);
 	}
 
-	/** 公開用キャプション（PR案件ならPR表記、写真風の生成画像を含むならAI生成の表示付き）。上限を超えるなら例外 */
+	/** 公開用キャプション（PR案件ならPR表記、写真風の生成画像を含むならAI生成の表示付き。組み立ては PublishCaption）。上限を超えるなら例外 */
 	public Caption publishCaption(String prLabel) {
-		Notices notices = notices(prLabel);
-		return content.caption().withNotices(notices.prefix(), notices.suffix());
+		return content.revision().publishCaption(prLabel).toCaption();
 	}
 
 	/** Instagram の AI info（is_ai_generated）とキャプション末尾の定型文を付けるか */
 	public AiDisclosure aiDisclosure() {
-		return AiDisclosure.of(content.media());
-	}
-
-	/** 公開用キャプションの付記（先頭のPR表記・末尾のAI生成の表示）。組み立てはここ1か所だけ（REQ-005 設計 2章。TS の Post.noticesOf と揃える） */
-	private Notices notices(String prLabel) {
-		String prefix = content.prCategory().labelPrefix(prLabel);
-		AiDisclosure disclosure = aiDisclosure();
-		List<String> names = new ArrayList<>();
-		if (!prefix.isEmpty()) {
-			names.add(PR_LABEL_NAME);
-		}
-		if (disclosure.isRequired()) {
-			names.add(AiDisclosure.NAME);
-		}
-		return new Notices(prefix, disclosure.suffix(), List.copyOf(names));
-	}
-
-	private static final String PR_LABEL_NAME = "PR表記";
-
-	private record Notices(String prefix, String suffix, List<String> names) {
+		return content.revision().aiDisclosure();
 	}
 
 	public PostEvent published() {
@@ -150,12 +125,21 @@ public final class Post {
 	}
 
 	/** 承認された版の内容 */
-	public record ApprovedContent(UUID revisionId, PostFormat format, Caption caption, PrCategory prCategory,
-			PostMediaList media) {
+	public record ApprovedContent(UUID revisionId, PostFormat format, PostRevision revision) {
 		public ApprovedContent {
-			if (revisionId == null || format == null || caption == null || prCategory == null || media == null) {
+			if (revisionId == null || format == null || revision == null) {
 				throw new IllegalArgumentException("承認された版の内容は必須");
 			}
+		}
+
+		/** 写真をアップロードした投稿の内容 */
+		public ApprovedContent(UUID revisionId, PostFormat format, Caption caption, PrCategory prCategory, PostMediaList media) {
+			this(revisionId, format, PostRevision.ofPhotos(caption, prCategory, media));
+		}
+
+		/** 投稿画像一覧（テンプレートの投稿では空） */
+		public PostMediaList media() {
+			return revision.photos();
 		}
 	}
 

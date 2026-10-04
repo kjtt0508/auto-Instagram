@@ -16,6 +16,15 @@ public final class Hashtag {
 		this.text = text;
 	}
 
+	/** 全角「＃」と半角「#」を同じものとして比べる */
+	boolean sameAs(Hashtag other) {
+		return normalized().equals(other.normalized());
+	}
+
+	private String normalized() {
+		return text.replaceFirst("^＃", "#");
+	}
+
 	@Override
 	public boolean equals(Object o) {
 		return o instanceof Hashtag h && h.text.equals(text);
