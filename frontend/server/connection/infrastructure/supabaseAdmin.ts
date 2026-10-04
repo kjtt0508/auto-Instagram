@@ -4,7 +4,7 @@ import type { ConnectingMember, ConnectingRecords, InstagramAccount, SealedToken
 export type AdminConfig = { url: string; serviceRoleKey: string };
 
 export class SupabaseAdmin implements ConnectingRecords {
-  constructor(private readonly config: AdminConfig, private readonly http: typeof fetch = fetch) {}
+  constructor(private readonly config: AdminConfig, private readonly http: typeof fetch = (input, init) => fetch(input, init)) {}
 
   /** 画面から来たアクセストークン（JWT）の持ち主の、有効なメンバー。いなければ null */
   async memberOf(accessToken: string): Promise<ConnectingMember | null> {

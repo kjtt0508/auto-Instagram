@@ -7,7 +7,7 @@ const SCOPES = ["instagram_business_basic", "instagram_business_content_publish"
 export type InstagramAppConfig = { appId: string; appSecret: string; redirectUri: string; apiVersion: string };
 
 export class InstagramOAuthClient implements InstagramAuthorization {
-  constructor(private readonly config: InstagramAppConfig, private readonly http: typeof fetch = fetch) {}
+  constructor(private readonly config: InstagramAppConfig, private readonly http: typeof fetch = (input, init) => fetch(input, init)) {}
 
   authorizeUrl(state: string): string {
     const query = new URLSearchParams({ client_id: this.config.appId, redirect_uri: this.config.redirectUri,

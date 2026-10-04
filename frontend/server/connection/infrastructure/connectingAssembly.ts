@@ -11,7 +11,10 @@ export type ApiEnv = {
 
 const KEY_VERSION = 1;
 
-export function connectingAssembly(http: typeof fetch = fetch) {
+// Workers では fetch を別のオブジェクトのメソッドとして呼ぶと Illegal invocation になるため、関数で包んで渡す
+const workersFetch: typeof fetch = (input, init) => fetch(input, init);
+
+export function connectingAssembly(http: typeof fetch = workersFetch) {
   return async (env: ApiEnv): Promise<InstagramConnecting> => new InstagramConnecting({
     records: new SupabaseAdmin({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }, http),
     instagram: new InstagramOAuthClient({ appId: env.IG_APP_ID, appSecret: env.IG_APP_SECRET,
