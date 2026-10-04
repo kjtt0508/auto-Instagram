@@ -71,7 +71,7 @@ create function app.image_generation_day() returns date language sql stable as $
   select (now() at time zone 'UTC')::date          -- = 日本時間 9:00 区切り（Workers AI の無料枠のリセット）
 $$;
 create function app.llm_day() returns date language sql stable as $$
-  select (now() at time zone 'America/Los_Angeles')::date   -- Gemini の日次上限のリセット（01_DB設計。要確認）
+  select (now() at time zone 'America/Los_Angeles')::date   -- Gemini の日次上限は太平洋時間の 0 時にリセット（公式の rate-limits で 2026-10-04 確認）
 $$;
 
 create table image_generation_usage_daily (     -- ADR-0009

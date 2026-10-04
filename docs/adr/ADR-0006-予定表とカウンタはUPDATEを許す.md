@@ -1,6 +1,6 @@
 # ADR-0006: 予定表（jobs）・カウンタ（llm_usage_daily）・照合値（oauth_states）・削除期限（pr_submission_contacts）は UPDATE / DELETE を許す
 
-- 状態: 提案
+- 状態: 承認（2026-10-04 梶原）
 - 日付: 2026-10-01
 - 関連: REQ-001, REQ-002, REQ-003 / 原則 P18
 

@@ -18,7 +18,7 @@ with t as (
 insert into tenant_settings (tenant_id, version, llm_provider, llm_model, llm_daily_limit, llm_warn_ratio,
                              publish_grace_minutes, pr_label, auto_draft_enabled)
 select m.tenant_id, 1,
-       'GEMINI', 'gemini-flash',  -- 生成AIは REQ-002 で使う。モデル名は着手時に確定する（要確認）
+       'GEMINI', 'gemini-3.5-flash-lite',  -- 画像生成の指示の英訳（REQ-005）と下書き案（REQ-002）に使う（2026-10-04 確認）
        200, 0.80,                 -- 1日の生成上限と警告の割合（REQ-002。仮置き）
        360,                       -- 公開猶予 6時間（BR-001-08。仮置き）
        E'【PR】\n',               -- PR表記（BR-001-05。仮置き）
