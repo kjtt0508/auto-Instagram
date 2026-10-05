@@ -40,7 +40,7 @@ public class MediaPreparation {
 
 	private void prepare(Post post) {
 		PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId());
-		post.approvedMedia().notYetIn(prepared).forEach(original -> posts.recordPreparedMedia(
+		post.originalsNotYetIn(prepared).forEach(original -> posts.recordPreparedMedia(
 				post.approvedRevisionId(),
 				original.copiedTo(storage.copyToPublic(post.tenantId(), original.storagePath()))));
 	}

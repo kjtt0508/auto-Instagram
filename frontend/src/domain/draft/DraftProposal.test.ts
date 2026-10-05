@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { sampleBody, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
+import { SAMPLE_TEMPLATE_VERSION, sampleBody, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
+import { Caption } from "../post/Caption";
+import { PostRevision } from "../post/PostRevision";
+import { PrCategory } from "../post/PrCategory";
 import { SlideList } from "../slide/SlideList";
 import { SlideRole } from "../slide/SlideRole";
 import { DraftProposal } from "./DraftProposal";
@@ -161,6 +164,29 @@ describe("ネタに無い情報（UNSUPPORTED_FACT。AC-002-13）", () => {
 
   it("「1万円」は「10000円」と同じ金額", () => {
     expect(proposalWith("参加費は1万円").unsupportedFacts("参加費は10,000円")).toEqual([]);
+  });
+});
+
+describe("投稿の版への文言の取り込み（修正指示の再生成）", () => {
+  const revisionOf = (prCategory: PrCategory) => PostRevision.ofSlides({
+    caption: Caption.of("元の本文"), prCategory, slides: sampleSlides([sampleBody(sampleMaterial("ILLUSTRATION"))]),
+    templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: ["#元"],
+  });
+
+  it("BR-002-04 人が設定したPR区分は、下書き案のPR区分が違っても修正で変わらない", () => {
+    const prDraft = DraftProposal.parse(draftJson({ prCategory: "PR" }), context()).proposal!;
+    expect(revisionOf(PrCategory.NONE).withDraftText(prDraft).prCategory).toBe(PrCategory.NONE);
+    const noneDraft = DraftProposal.parse(draftJson({ prCategory: "NONE" }), context()).proposal!;
+    expect(revisionOf(PrCategory.PR).withDraftText(noneDraft).prCategory).toBe(PrCategory.PR);
+  });
+
+  it("AC-002-05 キャプションと追加のハッシュタグは新しい文言になり、素材画像は保たれる", () => {
+    const draft = DraftProposal.parse(draftJson(), context()).proposal!;
+    const after = revisionOf(PrCategory.NONE).withDraftText(draft);
+    expect(after.caption.text).toBe(draft.caption.text);
+    expect(after.publishCaption("【PR】\n").text).toContain("#学割\n#京都");
+    expect(after.publishCaption("【PR】\n").text).not.toContain("#元");
+    expect(after.imageRefs()).toContain("t/materials/1.jpg");
   });
 });
 

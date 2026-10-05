@@ -9,6 +9,9 @@ import java.util.List;
  */
 public final class FixedHashtags {
 
+	/** AI が足すハッシュタグの最大数 */
+	static final int ADDITIONAL_MAX = 5;
+
 	private final List<Hashtag> hashtags;
 
 	/** 各要素がハッシュタグの形でなければ例外。固定ハッシュタグの中の重複も除く */
@@ -21,6 +24,16 @@ public final class FixedHashtags {
 		List<Hashtag> all = new ArrayList<>(hashtags);
 		additional.forEach(text -> all.add(new Hashtag(text)));
 		return withoutDuplicates(all).stream().map(Hashtag::toString).toList();
+	}
+
+	/** 追加のハッシュタグ（AI が足す・人が足す）が満たさない条件。0〜5個で、どれもハッシュタグの形 */
+	public List<String> violationsOfAdditional(List<String> additional) {
+		List<String> violations = new ArrayList<>();
+		if (additional.size() > ADDITIONAL_MAX) {
+			violations.add("追加のハッシュタグは" + ADDITIONAL_MAX + "個までです（" + additional.size() + "個）");
+		}
+		additional.stream().filter(t -> !Hashtag.isHashtag(t)).forEach(t -> violations.add("ハッシュタグの形が正しくありません: " + t));
+		return List.copyOf(violations);
 	}
 
 	private static List<Hashtag> withoutDuplicates(List<Hashtag> hashtags) {

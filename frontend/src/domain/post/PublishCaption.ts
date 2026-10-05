@@ -64,19 +64,22 @@ export class PublishCaption {
 
   /** 満たさない項目。文字数の超過には、付けたものの名前（PR表記・AI生成の表示・キャプションの定型・ハッシュタグ）と文字数を添える */
   violations(): string[] {
-    const violations: string[] = [];
-    if (this.length() > Caption.MAX_LENGTH) violations.push(this.lengthViolation());
-    if (this.hashtagCount() > Caption.MAX_HASHTAGS) {
-      violations.push(`ハッシュタグは${Caption.MAX_HASHTAGS}個までです（${this.hashtagCount()}個）`);
-    }
-    return violations;
+    const length = this.lengthViolation();
+    return [...(length ? [length] : []), ...this.hashtagViolations()];
   }
 
-  private lengthViolation(): string {
+  /** 文字数の違反（上限以内なら undefined）。付けたものの名前と文字数を添える */
+  lengthViolation(): string | undefined {
+    if (this.length() <= Caption.MAX_LENGTH) return undefined;
     const limit = formatCount(Caption.MAX_LENGTH);
     const count = formatCount(this.length());
     if (this.noticeNames.length > 0) return `${this.noticeNames.join("と")}を含めて${limit}文字以内にしてください（${count}文字）`;
     if (this.hasTemplateParts) return `${PublishCaption.TEMPLATE_PARTS_NAME}を含めて${limit}文字以内にしてください（${count}文字）`;
     return `キャプションは${limit}文字以内です（${count}文字）`;
+  }
+
+  /** ハッシュタグの数の違反（30個以内なら空） */
+  hashtagViolations(): string[] {
+    return this.hashtagCount() > Caption.MAX_HASHTAGS ? [`ハッシュタグは${Caption.MAX_HASHTAGS}個までです（${this.hashtagCount()}個）`] : [];
   }
 }

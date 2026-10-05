@@ -50,6 +50,11 @@ public final class PostMediaList {
 		return media.stream().anyMatch(PostMedia::requiresAiDisclosure);
 	}
 
+	/** 承認時に「写真風の生成画像を含みます」の確認が要るか */
+	boolean needsApprovalCheck() {
+		return media.stream().anyMatch(PostMedia::needsApprovalCheck);
+	}
+
 	public List<String> storagePaths() {
 		return media.stream().map(PostMedia::storagePath).toList();
 	}

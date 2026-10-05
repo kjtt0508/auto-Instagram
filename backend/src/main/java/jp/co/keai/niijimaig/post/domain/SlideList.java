@@ -64,6 +64,11 @@ public final class SlideList {
 		return slides.stream().anyMatch(Slide::requiresAiDisclosure);
 	}
 
+	/** 承認時に「写真風の生成画像を含みます」の確認が要るか */
+	boolean needsApprovalCheck() {
+		return slides.stream().anyMatch(Slide::needsApprovalCheck);
+	}
+
 	/** 画像化のとき、承認で選んだ過去の投稿の表紙を最後のスライドに載せた新しい構成 */
 	public SlideList withPastPosts(List<PastPostCover> covers) {
 		List<Slide> replaced = new ArrayList<>(slides.subList(0, slides.size() - 1));

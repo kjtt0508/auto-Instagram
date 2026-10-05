@@ -19,4 +19,9 @@ public record GeneratedImage(UUID generationId, int candidatePosition, ImageStyl
 	public boolean requiresAiDisclosure() {
 		return style.requiresAiDisclosure();
 	}
+
+	/** 承認時に「写真風の生成画像を含みます」の確認が要る画像か */
+	public boolean needsApprovalCheck() {
+		return style.needsApprovalCheck();
+	}
 }

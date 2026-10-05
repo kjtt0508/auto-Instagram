@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sampleBody, sampleCoverText, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
+import { SAMPLE_TEMPLATE_VERSION, sampleBody, sampleCoverText, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
 import { ClosingContent } from "../slide/ClosingContent";
 import { CoverContent } from "../slide/CoverContent";
 import { Slide } from "../slide/Slide";
@@ -19,7 +19,8 @@ const photos = (styleCode?: string) => PostMediaList.of([PostMedia.of({
 })]);
 const photoRevision = (styleCode?: string) => PostRevision.ofPhotos({ caption: Caption.of("本文"), prCategory: PrCategory.NONE, media: photos(styleCode) });
 const templateRevision = (bodies = [sampleBody()], additionalHashtags: string[] = []) => PostRevision.ofSlides({
-  caption: Caption.of("本文"), prCategory: PrCategory.NONE, slides: sampleSlides(bodies), settings: sampleSettings(), additionalHashtags });
+  caption: Caption.of("本文"), prCategory: PrCategory.NONE, slides: sampleSlides(bodies), templateVersion: SAMPLE_TEMPLATE_VERSION,
+  settings: sampleSettings(), additionalHashtags });
 
 describe("投稿の版とAI生成の表示", () => {
   it("AC-005-04 投稿画像一覧に写真風の生成画像を含む版にはAI生成の表示が要る。背景・イラストや撮った写真には要らない", () => {
@@ -53,13 +54,25 @@ describe("投稿の版（テンプレートの投稿）", () => {
   it("AC-002-02 画像化に必要な画像の参照は、背景写真・素材画像（と設定のロゴ）。過去の投稿の表紙は含まない", () => {
     const revision = templateRevision([sampleBody(sampleMaterial("ILLUSTRATION"))]);
     expect(revision.imageRefs()).toEqual(["t/backgrounds/1.jpg", "t/materials/1.jpg"]);
-    expect(revision.slides()?.items().at(-1)?.closingContent()?.pastPosts).toEqual([]);
+    expect(sampleSlides().items().at(-1)?.closingContent()?.pastPosts).toEqual([]);
     expect(photoRevision().imageRefs()).toEqual([]);
   });
 
-  it("投稿画像一覧とスライド構成のどちらか一方だけを持つ", () => {
-    expect([photoRevision().media() !== undefined, photoRevision().slides() === undefined]).toEqual([true, true]);
-    expect([templateRevision().media() === undefined, templateRevision().slides() !== undefined]).toEqual([true, true]);
+  it("AC-002-02 公開用画像の枚数と準備のしかたは中身が決める（写真は投稿画像の枚数を複製、テンプレートはスライドの枚数を画像化）", () => {
+    expect([photoRevision().expectedPublishMediaCount(), photoRevision().preparation()]).toEqual([1, "COPY"]);
+    expect([templateRevision().expectedPublishMediaCount(), templateRevision().preparation()]).toEqual([3, "RENDER"]);
+    expect(templateRevision([sampleBody(), sampleBody()]).expectedPublishMediaCount()).toBe(4);
+  });
+
+  it("AC-002-18 承認を依頼できない理由は、スライド・ハッシュタグ・文字数のどれもすべて返す（段階的にしない）", () => {
+    const revision = PostRevision.ofSlides({ caption: Caption.restore("あ".repeat(2115)), prCategory: PrCategory.NONE,
+      templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: ["#a", "#b", "#c", "#d", "#e", "#f"],
+      slides: SlideList.restore([Slide.createCover(CoverContent.of(sampleCoverText())), Slide.createClosing(ClosingContent.empty())]) });
+    expect(revision.violationsForApproval(PR_LABEL)).toEqual([
+      "中のスライドは1〜8枚にしてください（0枚）",
+      "追加のハッシュタグは5個までです（6個）",
+      "キャプションの定型とハッシュタグを含めて2,200文字以内にしてください（2,219文字）",
+    ]);
   });
 
   it("AC-002-18 承認を依頼できない理由: スライド構成の並び・追加のハッシュタグ・キャプションの文字数", () => {
@@ -67,13 +80,13 @@ describe("投稿の版（テンプレートの投稿）", () => {
     expect(templateRevision([sampleBody()], ["#a", "#b", "#c", "#d", "#e", "#f"]).violationsForApproval(PR_LABEL))
       .toEqual(["追加のハッシュタグは5個までです（6個）"]);
     const broken = PostRevision.ofSlides({ caption: Caption.of("本文"), prCategory: PrCategory.NONE, settings: sampleSettings(),
-      additionalHashtags: [], slides: SlideList.restore([Slide.createCover(CoverContent.of(sampleCoverText())), Slide.createClosing(ClosingContent.empty())]) });
+      templateVersion: SAMPLE_TEMPLATE_VERSION, additionalHashtags: [], slides: SlideList.restore([Slide.createCover(CoverContent.of(sampleCoverText())), Slide.createClosing(ClosingContent.empty())]) });
     expect(broken.violationsForApproval(PR_LABEL)).toEqual(["中のスライドは1〜8枚にしてください（0枚）"]);
   });
 
   it("AC-002-22 キャプション本文を上限を1文字超える長さに書き換えると、承認を依頼できず理由が出る", () => {
     const revisionOf = (length: number) => PostRevision.ofSlides({ caption: Caption.restore("あ".repeat(length)), prCategory: PrCategory.NONE,
-      slides: sampleSlides(), settings: sampleSettings(), additionalHashtags: [] });
+      slides: sampleSlides(), templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: [] });
     expect(revisionOf(2114).violationsForApproval(PR_LABEL)).toEqual([]);
     expect(revisionOf(2115).violationsForApproval(PR_LABEL))
       .toEqual(["キャプションの定型とハッシュタグを含めて2,200文字以内にしてください（2,201文字）"]);

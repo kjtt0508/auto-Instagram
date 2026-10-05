@@ -5,12 +5,13 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 表紙の文言: 表紙の3段に描く文言。対象・キーワード（1〜10文字）・添え書き（0〜16文字）・締めの言葉（1〜8文字）と、帯のアクセント色。
  * 対象は投稿の型の設定の「表紙の対象の候補」のどれか（REQ-002 BR-002-12）。TS の CoverText と揃える（docs/model/fixtures/slide-text.json）
  */
-public record CoverText(String target, String keyword, String annotation, String closingWords, AccentColor accent) {
+public final class CoverText {
 
 	static final int KEYWORD_MAX = 10;
 	static final int ANNOTATION_MAX = 16;
@@ -20,10 +21,52 @@ public record CoverText(String target, String keyword, String annotation, String
 	public record Parts(String target, String keyword, String annotation, String closingWords, String accentCode) {
 	}
 
-	public CoverText {
+	private final String target;
+	private final String keyword;
+	private final String annotation;
+	private final String closingWords;
+	private final AccentColor accent;
+
+	private CoverText(String target, String keyword, String annotation, String closingWords, AccentColor accent) {
 		if (target == null || keyword == null || annotation == null || closingWords == null || accent == null) {
 			throw new IllegalArgumentException("表紙の文言の項目は必須");
 		}
+		this.target = target;
+		this.keyword = keyword;
+		this.annotation = annotation;
+		this.closingWords = closingWords;
+		this.accent = accent;
+	}
+
+	public String target() {
+		return target;
+	}
+
+	public String keyword() {
+		return keyword;
+	}
+
+	public String annotation() {
+		return annotation;
+	}
+
+	public String closingWords() {
+		return closingWords;
+	}
+
+	public AccentColor accent() {
+		return accent;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		return o instanceof CoverText t && t.target.equals(target) && t.keyword.equals(keyword) && t.annotation.equals(annotation)
+				&& t.closingWords.equals(closingWords) && t.accent == accent;
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(target, keyword, annotation, closingWords, accent);
 	}
 
 	/** 満たさない条件（空なら受け付けられる） */

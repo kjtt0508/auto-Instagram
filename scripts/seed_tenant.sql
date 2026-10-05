@@ -30,6 +30,9 @@ insert into image_generation_settings (tenant_id, version, provider, model, dail
 select m.tenant_id, 1, 'CLOUDFLARE_WORKERS_AI', '@cf/black-forest-labs/flux-1-schnell', 20, 0.80
   from members m where m.email = :'admin_email';
 
+-- プロンプトの初版（REQ-002。PLAN・REVISE。本文は書き方の指示だけ。V10 の関数を使う）
+select app.seed_initial_prompts(m.tenant_id) from members m where m.email = :'admin_email';
+
 -- 登録した団体ID（Storage のパスや確認に使う）
 select t.id as tenant_id, t.name, m.email as admin_email
   from tenants t join members m on m.tenant_id = t.id

@@ -34,6 +34,11 @@ public record BodyContent(SlideText text, Optional<MaterialImage> material) impl
 	}
 
 	@Override
+	public boolean needsApprovalCheck() {
+		return material.map(MaterialImage::needsApprovalCheck).orElse(false);
+	}
+
+	@Override
 	public Map<String, Object> renderValues() {
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put("heading", text.heading());

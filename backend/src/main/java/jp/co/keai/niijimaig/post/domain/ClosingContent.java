@@ -39,6 +39,11 @@ public record ClosingContent(List<PastPostCover> pastPosts) implements Slide.Con
 	}
 
 	@Override
+	public boolean needsApprovalCheck() {
+		return false;
+	}
+
+	@Override
 	public Map<String, Object> renderValues() {
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put("pastPosts", imageRefs());

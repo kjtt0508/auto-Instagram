@@ -104,7 +104,7 @@ export class DraftProposal {
     const fits = caption.length() <= remaining;
     return [
       ...(fits ? [] : [`キャプション本文は${remaining.toLocaleString("ja-JP")}文字以内にしてください（${caption.length().toLocaleString("ja-JP")}文字。PR表記・AI生成の表示・定型・ハッシュタグを除いた残り）`]),
-      ...assembled.violations().filter((v) => v.startsWith("ハッシュタグ")),
+      ...assembled.hashtagViolations(),
     ];
   }
 

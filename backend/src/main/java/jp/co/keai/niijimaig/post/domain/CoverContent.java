@@ -39,6 +39,11 @@ public record CoverContent(CoverText text, Optional<Background> background) impl
 	}
 
 	@Override
+	public boolean needsApprovalCheck() {
+		return false;
+	}
+
+	@Override
 	public Map<String, Object> renderValues() {
 		Map<String, Object> values = text.renderValues();
 		background.ifPresent(b -> values.put("background", b.storagePath()));

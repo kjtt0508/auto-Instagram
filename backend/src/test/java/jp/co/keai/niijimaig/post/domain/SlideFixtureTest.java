@@ -93,8 +93,8 @@ class SlideFixtureTest {
 	void pastPostCovers() {
 		var own = UUID.randomUUID();
 		assertThatThrownBy(() -> PastPostCover.of(own, "t/a.jpg", own)).hasMessageContaining("投稿自身");
-		List<PastPostCover> three = List.of(new PastPostCover(UUID.randomUUID(), "t/a.jpg"),
-				new PastPostCover(UUID.randomUUID(), "t/b.jpg"), new PastPostCover(UUID.randomUUID(), "t/c.jpg"));
+		List<PastPostCover> three = List.of(PastPostCover.restore(UUID.randomUUID(), "t/a.jpg"),
+				PastPostCover.restore(UUID.randomUUID(), "t/b.jpg"), PastPostCover.restore(UUID.randomUUID(), "t/c.jpg"));
 		assertThatThrownBy(() -> new ClosingContent(three)).hasMessageContaining("2件まで");
 	}
 
@@ -104,7 +104,7 @@ class SlideFixtureTest {
 		SlideList slides = SlideSamples.slides(List.of(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.ILLUSTRATION)))));
 		assertThat(slides.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg");
 
-		SlideList withPast = slides.withPastPosts(List.of(new PastPostCover(UUID.randomUUID(), "t/posts/p2/1.jpg")));
+		SlideList withPast = slides.withPastPosts(List.of(PastPostCover.restore(UUID.randomUUID(), "t/posts/p2/1.jpg")));
 		assertThat(withPast.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg", "t/posts/p2/1.jpg");
 		assertThat(withPast.renderValues()).hasSize(3);
 		assertThat(withPast.renderValues().get(0)).containsEntry("template", "cover").containsEntry("keyword", "期末試験")

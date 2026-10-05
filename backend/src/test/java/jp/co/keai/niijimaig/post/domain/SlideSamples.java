@@ -10,6 +10,9 @@ import tools.jackson.databind.JsonNode;
 /** テストで使うスライド・投稿の型の設定の見本（キャプションの定型は caption.json の架空の文面） */
 final class SlideSamples {
 
+	/** テンプレートの版の名前 */
+	static final String TEMPLATE_VERSION = "niijima@1";
+
 	private SlideSamples() {
 	}
 
@@ -31,7 +34,7 @@ final class SlideSamples {
 	}
 
 	static BodyContent body(Optional<MaterialImage> material) {
-		return new BodyContent(new SlideText("学割が使える", "学生証を見せるだけで割引になります。", List.of("学生証")), material);
+		return new BodyContent(SlideText.restore("学割が使える", "学生証を見せるだけで割引になります。", List.of("学生証")), material);
 	}
 
 	static MaterialImage material(ImageStyle style) {

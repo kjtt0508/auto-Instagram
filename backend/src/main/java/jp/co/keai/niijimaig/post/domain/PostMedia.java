@@ -44,6 +44,11 @@ public final class PostMedia {
 		return generated != null && generated.requiresAiDisclosure();
 	}
 
+	/** 承認時の確認が要る画像か（写真風の生成画像） */
+	boolean needsApprovalCheck() {
+		return generated != null && generated.needsApprovalCheck();
+	}
+
 	public int width() {
 		return width;
 	}

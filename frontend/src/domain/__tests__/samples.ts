@@ -17,6 +17,9 @@ import { SlideText } from "../slide/SlideText";
 export const valueOf = (value: string | { repeat: string; count: number }): string =>
   typeof value === "string" ? value : value.repeat.repeat(value.count);
 
+/** テスト用のテンプレートの版の名前 */
+export const SAMPLE_TEMPLATE_VERSION = "niijima@1";
+
 /** テスト用の投稿の型の設定（キャプションの定型は caption.json の架空の文面） */
 export const sampleSettings = (): PostStyleSettings => PostStyleSettings.of({
   tenantId: "t1", version: 1, bandText: "テスト帯", coverTargets: ["同志社大学", "同志社大生"],

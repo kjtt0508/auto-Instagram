@@ -64,17 +64,26 @@ class CaptionTest {
 	void noticeViolation() {
 		Post post = post("あ".repeat(2178), PrCategory.PR, ImageStyle.PHOTOREALISTIC);
 
-		assertThat(post.violationsForPublishing(post.approvedMedia(), new ImageSpec(), "【PR】\n"))
+		assertThat(post.violationsForPublishing(oneMedia(), new ImageSpec(), "【PR】\n"))
 				.containsExactly("PR表記とAI生成の表示を含めて2,200文字以内にしてください（2,201文字）");
 	}
 
 	/** 1枚の投稿。style が null なら撮った写真、そうでなければその種類の生成画像 */
 	static Post post(String caption, PrCategory category, ImageStyle style) {
-		Optional<GeneratedImage> generated = Optional.ofNullable(style).map(s -> new GeneratedImage(UUID.randomUUID(), 1, s));
-		PostMediaList media = new PostMediaList(List.of(new PostMedia(1, "t/posts/a.jpg", 1080, 1350, 500_000, generated)));
 		return new Post(new Post.Identity(UUID.randomUUID(), UUID.randomUUID()), PostStatus.SCHEDULED,
-				new Post.ApprovedContent(UUID.randomUUID(), PostFormat.FEED_IMAGE, new Caption(caption), category, media),
+				new Post.ApprovedContent(UUID.randomUUID(), PostFormat.FEED_IMAGE, new Caption(caption), category, mediaOf(style)),
 				ScheduledAt.restore(Instant.parse("2026-11-03T01:00:00Z")));
+	}
+
+	/** 1枚の投稿画像一覧。style が null なら撮った写真、そうでなければその種類の生成画像 */
+	static PostMediaList mediaOf(ImageStyle style) {
+		Optional<GeneratedImage> generated = Optional.ofNullable(style).map(s -> new GeneratedImage(UUID.randomUUID(), 1, s));
+		return new PostMediaList(List.of(new PostMedia(1, "t/posts/a.jpg", 1080, 1350, 500_000, generated)));
+	}
+
+	/** 公開用の準備が済んだ1枚 */
+	static PostMediaList oneMedia() {
+		return mediaOf(null);
 	}
 
 	private String tags(int count) {

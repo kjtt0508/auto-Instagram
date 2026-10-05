@@ -21,6 +21,9 @@ public record Slide(Content content) {
 		/** 写真風の生成画像を含むか */
 		boolean requiresAiDisclosure();
 
+		/** 承認時に「写真風の生成画像を含みます」の確認が要るか */
+		boolean needsApprovalCheck();
+
 		/** 画像化でテンプレートに渡す値 */
 		Map<String, Object> renderValues();
 	}
@@ -43,6 +46,11 @@ public record Slide(Content content) {
 	/** 写真風の生成画像を含むか（中身に委ねる） */
 	public boolean requiresAiDisclosure() {
 		return content.requiresAiDisclosure();
+	}
+
+	/** 承認時の確認が要るか（中身に委ねる） */
+	public boolean needsApprovalCheck() {
+		return content.needsApprovalCheck();
 	}
 
 	/** 画像化でテンプレートに渡す値（役割とテンプレートの名前を添える） */

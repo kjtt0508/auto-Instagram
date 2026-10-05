@@ -21,6 +21,11 @@ public final class AiDisclosure {
 		return new AiDisclosure(revision.requiresAiDisclosure());
 	}
 
+	/** 付けない表示（写真風の生成画像を含まないとき） */
+	static AiDisclosure notRequired() {
+		return new AiDisclosure(false);
+	}
+
 	/** 素材画像がまだ無く、写真風を含むか分からない生成の時点で、常に付く前提で文字数を見込むための表示（REQ-002 BR-002-16） */
 	public static AiDisclosure assumingRequired() {
 		return new AiDisclosure(true);

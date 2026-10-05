@@ -24,4 +24,9 @@ public record MaterialImage(String storagePath, int width, int height, Optional<
 	boolean requiresAiDisclosure() {
 		return generated.map(GeneratedImage::requiresAiDisclosure).orElse(false);
 	}
+
+	/** 承認時の確認が要る画像か（写真風の生成画像のときだけ） */
+	boolean needsApprovalCheck() {
+		return generated.map(GeneratedImage::needsApprovalCheck).orElse(false);
+	}
 }

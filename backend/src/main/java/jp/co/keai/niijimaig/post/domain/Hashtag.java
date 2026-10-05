@@ -5,12 +5,18 @@ import java.util.regex.Pattern;
 /** ハッシュタグ: 「#」で始まり空白を含まない分類語 */
 public final class Hashtag {
 
-	static final Pattern IN_TEXT = Pattern.compile("[#＃][^\\s#＃]+");
+	/** 空白は Unicode の空白（全角空白 U+3000・NBSP U+00A0 を含む）。TS の \s と同じ範囲にそろえる（BOM U+FEFF も空白） */
+	static final Pattern IN_TEXT = Pattern.compile("[#＃][^\\s\\uFEFF#＃]+", Pattern.UNICODE_CHARACTER_CLASS);
+
+	/** ハッシュタグの形か（「#」始まりで空白を含まない） */
+	static boolean isHashtag(String text) {
+		return text != null && IN_TEXT.matcher(text).matches();
+	}
 
 	private final String text;
 
 	public Hashtag(String text) {
-		if (text == null || !IN_TEXT.matcher(text).matches()) {
+		if (!isHashtag(text)) {
 			throw new IllegalArgumentException("ハッシュタグは「#」で始まり空白を含みません: " + text);
 		}
 		this.text = text;

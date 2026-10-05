@@ -1,5 +1,5 @@
 {
-  "$comment": "キャプション・PR区分・AI生成の表示の共通テストケース（ADR-0005）。aiDisclosure=true は写真風の生成画像を含む投稿（REQ-005）。text は segments を連結して作る（repeat を count 回）。文字数はコードポイントで数える。violation（画面の文言）は TS だけが比べる。publishText.text があれば公開用キャプションの完全な文字列を TS と Java の両方で比べる。templateCases はテンプレートの投稿（REQ-002）で、body（短い本文）か segments、additionalHashtags、aiDisclosure（写真風の素材画像を含む）を持ち、文言は TS と Java の両方が比べる",
+  "$comment": "キャプション・PR区分・AI生成の表示の共通テストケース（ADR-0005）。aiDisclosure=true は写真風の生成画像を含む投稿（REQ-005）。text は segments を連結して作る（repeat を count 回）。文字数はコードポイントで数える。violation（違反の文言）は TS と Java の両方が比べる。hashtagForms はハッシュタグの形（全角空白・NBSP も空白）を両方が比べる。publishText.text があれば公開用キャプションの完全な文字列を TS と Java の両方で比べる。templateCases はテンプレートの投稿（REQ-002）で、body（短い本文）か segments、additionalHashtags、aiDisclosure（写真風の素材画像を含む）を持ち、文言は TS と Java の両方が比べる",
   "prLabel": "【PR】\n",
   "cases": [
     { "id": "AC-001-08", "name": "2,200文字は保存できる", "segments": [{ "repeat": "あ", "count": 2200 }], "prCategory": "NONE", "valid": true, "publishValid": true },
@@ -13,10 +13,21 @@
     { "id": "BR-001-05", "name": "通常の投稿にはPR表記を付けない", "segments": [{ "repeat": "あ", "count": 10 }], "prCategory": "NONE", "valid": true, "publishValid": true, "publishText": { "prefix": "", "length": 10, "text": "ああああああああああ" } },
     { "id": "AC-001-09", "name": "PR案件はPR表記を先頭に付ける（アップロードの投稿には定型もハッシュタグも足さない）", "segments": [{ "repeat": "学園祭", "count": 1 }], "prCategory": "PR", "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "length": 8, "text": "【PR】\n学園祭" } },
     { "id": "AC-005-10", "name": "PR案件で写真風の生成画像を含むと、先頭にPR表記・末尾にAI生成の表示が付く", "segments": [{ "repeat": "学園祭", "count": 1 }], "prCategory": "PR", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "suffix": "\n※画像はAIで生成したイメージです", "length": 26, "text": "【PR】\n学園祭\n※画像はAIで生成したイメージです" } },
+    { "id": "AC-005-04", "name": "写真風の生成画像を含む短文は、PR表記なしでAI生成の表示だけが末尾に付く", "segments": [{ "repeat": "学園祭", "count": 1 }], "prCategory": "NONE", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "", "suffix": "\n※画像はAIで生成したイメージです", "length": 21, "text": "学園祭\n※画像はAIで生成したイメージです" } },
     { "id": "AC-005-04", "name": "写真風の生成画像を含む本文2,182文字はAI生成の表示込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2182 }], "prCategory": "NONE", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "", "suffix": "\n※画像はAIで生成したイメージです", "length": 2200 } },
     { "id": "AC-005-04", "name": "写真風の生成画像を含む本文2,183文字はAI生成の表示込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2183 }], "prCategory": "NONE", "aiDisclosure": true, "valid": true, "publishValid": false, "violation": "AI生成の表示を含めて2,200文字以内にしてください（2,201文字）" },
     { "id": "AC-005-10", "name": "PR案件で写真風の生成画像を含む本文2,177文字は両方の付記込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2177 }], "prCategory": "PR", "aiDisclosure": true, "valid": true, "publishValid": true, "publishText": { "prefix": "【PR】\n", "suffix": "\n※画像はAIで生成したイメージです", "length": 2200 } },
     { "id": "AC-005-10", "name": "PR案件で写真風の生成画像を含む本文2,178文字は両方の付記込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2178 }], "prCategory": "PR", "aiDisclosure": true, "valid": true, "publishValid": false, "violation": "PR表記とAI生成の表示を含めて2,200文字以内にしてください（2,201文字）" }
+  ],
+  "hashtagForms": [
+    { "id": "BR-001-05", "name": "半角 # で始まる", "text": "#学割", "valid": true },
+    { "id": "BR-001-05", "name": "全角 ＃ で始まる", "text": "＃学割", "valid": true },
+    { "id": "BR-001-05", "name": "半角空白を含む", "text": "#学割 京都", "valid": false },
+    { "id": "BR-001-05", "name": "全角空白（U+3000）を含む", "text": "#学割　京都", "valid": false },
+    { "id": "BR-001-05", "name": "NBSP（U+00A0）を含む", "text": "#学割 京都", "valid": false },
+    { "id": "BR-001-05", "name": "改行を含む", "text": "#学割\n京都", "valid": false },
+    { "id": "BR-001-05", "name": "# で始まらない", "text": "学割", "valid": false },
+    { "id": "BR-001-05", "name": "# だけ", "text": "#", "valid": false }
   ],
   "templateSettings": {
     "$comment": "テンプレートの投稿（REQ-002）の投稿の型の設定。キャプションの定型はテスト用の架空の文面（新島info の実際の文面はリポジトリに入れない）。定型は71文字、固定ハッシュタグは「#同志社大学」「#同志社」。組み立て: PR表記+本文+AI生成の表示 + 空行 + 定型 + 空行 + ハッシュタグ（固定→追加、重複を除き1行に1つ）",
@@ -27,6 +38,8 @@
     { "id": "AC-002-17", "name": "本文→定型→固定ハッシュタグ→追加のハッシュタグの順になり、重複の #同志社 は1つ", "body": "学園祭のお知らせです", "prCategory": "NONE", "additionalHashtags": ["#学割", "#同志社", "#京都"], "publishValid": true, "publishText": { "text": "学園祭のお知らせです\n\nーーーーーーーーーー\n『テスト団体 情報発信メディア』\n@test_account\n運営は架空のテスト団体です。\nご連絡はDMへお願いします。\n\n#同志社大学\n#同志社\n#学割\n#京都" } },
     { "id": "AC-002-17", "name": "全角＃の追加のハッシュタグも固定と重複なら除き、先に出たほう（固定）を残す", "body": "本文", "prCategory": "NONE", "additionalHashtags": ["＃同志社大学", "#新島"], "publishValid": true, "publishText": { "text": "本文\n\nーーーーーーーーーー\n『テスト団体 情報発信メディア』\n@test_account\n運営は架空のテスト団体です。\nご連絡はDMへお願いします。\n\n#同志社大学\n#同志社\n#新島" } },
     { "id": "BR-002-16", "name": "PR表記→本文→AI生成の表示→定型→ハッシュタグの順に組み立てる", "body": "本文", "prCategory": "PR", "aiDisclosure": true, "additionalHashtags": [], "publishValid": true, "publishText": { "text": "【PR】\n本文\n※画像はAIで生成したイメージです\n\nーーーーーーーーーー\n『テスト団体 情報発信メディア』\n@test_account\n運営は架空のテスト団体です。\nご連絡はDMへお願いします。\n\n#同志社大学\n#同志社" } },
+    { "id": "AC-002-17", "name": "追加のハッシュタグ同士の重複（半角・全角・同じもの）も1つにする", "body": "本文", "prCategory": "NONE", "additionalHashtags": ["#学割", "＃学割", "#学割", "#京都"], "publishValid": true, "publishText": { "text": "本文\n\nーーーーーーーーーー\n『テスト団体 情報発信メディア』\n@test_account\n運営は架空のテスト団体です。\nご連絡はDMへお願いします。\n\n#同志社大学\n#同志社\n#学割\n#京都" } },
+    { "id": "AC-002-17", "name": "本文のハッシュタグは固定ハッシュタグと重複しても消さない（本文の #同志社 も、後ろに付く固定の #同志社 も残り、数には両方入る）", "body": "本文 #同志社", "prCategory": "NONE", "additionalHashtags": [], "publishValid": true, "publishText": { "text": "本文 #同志社\n\nーーーーーーーーーー\n『テスト団体 情報発信メディア』\n@test_account\n運営は架空のテスト団体です。\nご連絡はDMへお願いします。\n\n#同志社大学\n#同志社" } },
     { "id": "AC-002-18", "name": "本文2,114文字は定型・ハッシュタグ込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2114 }], "prCategory": "NONE", "additionalHashtags": [], "publishValid": true, "publishText": { "length": 2200 } },
     { "id": "AC-002-18", "name": "本文2,115文字は定型・ハッシュタグ込みで2,201文字になり拒否", "segments": [{ "repeat": "あ", "count": 2115 }], "prCategory": "NONE", "additionalHashtags": [], "publishValid": false, "violation": "キャプションの定型とハッシュタグを含めて2,200文字以内にしてください（2,201文字）" },
     { "id": "AC-002-18", "name": "PR案件で写真風の素材画像を含む本文2,091文字は、PR表記・AI生成の表示・定型・ハッシュタグ込みで2,200文字になり受け付ける", "segments": [{ "repeat": "あ", "count": 2091 }], "prCategory": "PR", "aiDisclosure": true, "additionalHashtags": [], "publishValid": true, "publishText": { "length": 2200 } },

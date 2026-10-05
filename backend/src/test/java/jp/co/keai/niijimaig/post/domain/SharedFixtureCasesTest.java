@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -19,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 画面（TS）と同じ共通テストケース（docs/model/fixtures/*.json）を Java のドメインでも確かめる（ADR-0005）。
- * 文言（violation）は画面だけが比べ、ここでは可否だけを比べる。
+ * キャプションの違反の文言（violation）も比べる。
  */
 class SharedFixtureCasesTest {
 
@@ -48,6 +49,9 @@ class SharedFixtureCasesTest {
 		c.get("segments").forEach(s -> text.append(s.get("repeat").asString().repeat(s.get("count").asInt())));
 		if (!c.get("valid").asBoolean()) {
 			assertThatThrownBy(() -> new Caption(text.toString())).isInstanceOf(IllegalArgumentException.class);
+			// 本文そのものの違反の文言（Caption は上限超過を作れないので、公開用キャプションの組み立てに尋ねる）
+			PublishCaption body = PublishCaption.assemble("", text.toString(), AiDisclosure.notRequired(), Optional.empty(), List.of());
+			assertThat(body.violations()).contains(c.get("violation").asString());
 			return;
 		}
 		PrCategory category = PrCategory.valueOf(c.get("prCategory").asString());
@@ -56,6 +60,8 @@ class SharedFixtureCasesTest {
 		String label = fixture("caption.json").get("prLabel").asString();
 		if (!c.get("publishValid").asBoolean()) {
 			assertThatThrownBy(() -> post.publishCaption(label)).isInstanceOf(IllegalArgumentException.class);
+			assertThat(post.violationsForPublishing(CaptionTest.oneMedia(), new ImageSpec(), label))
+					.contains(c.get("violation").asString());
 			return;
 		}
 		Caption published = post.publishCaption(label);
@@ -68,6 +74,20 @@ class SharedFixtureCasesTest {
 		assertThat(published.text().codePointCount(0, published.text().length())).isEqualTo(expected.get("length").asInt());
 		if (expected.has("text")) {
 			assertThat(published.text()).isEqualTo(expected.get("text").asString());
+		}
+	}
+
+	static Stream<JsonNode> hashtagFormCases() { return cases("caption.json", "hashtagForms"); }
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("hashtagFormCases")
+	void ハッシュタグの形_全角空白とNBSPも空白_BR_001_05(JsonNode c) {
+		String text = c.get("text").asString();
+		assertThat(Hashtag.isHashtag(text)).isEqualTo(c.get("valid").asBoolean());
+		if (c.get("valid").asBoolean()) {
+			assertThat(new Hashtag(text).toString()).isEqualTo(text);
+		} else {
+			assertThatThrownBy(() -> new Hashtag(text)).isInstanceOf(IllegalArgumentException.class);
 		}
 	}
 

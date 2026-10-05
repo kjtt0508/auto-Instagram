@@ -68,30 +68,38 @@ public final class PublishCaption {
 	/** 満たさない項目。文字数の超過には、付けたもの（PR表記・AI生成の表示）の名前と文字数を添える */
 	public List<String> violations() {
 		List<String> violations = new ArrayList<>();
-		if (length() > Caption.MAX_LENGTH) {
-			violations.add(lengthViolation());
-		}
-		if (hashtagCount() > Caption.MAX_HASHTAGS) {
-			violations.add("ハッシュタグは" + Caption.MAX_HASHTAGS + "個までです（" + hashtagCount() + "個）");
-		}
+		lengthViolation().ifPresent(violations::add);
+		violations.addAll(hashtagViolations());
 		return List.copyOf(violations);
+	}
+
+	/** 文字数の違反（上限以内なら無し）。付けたものの名前と文字数を添える */
+	public Optional<String> lengthViolation() {
+		if (length() <= Caption.MAX_LENGTH) {
+			return Optional.empty();
+		}
+		String limit = String.format(Locale.JAPAN, "%,d", Caption.MAX_LENGTH);
+		String count = String.format(Locale.JAPAN, "%,d", length());
+		if (!noticeNames.isEmpty()) {
+			return Optional.of(String.join("と", noticeNames) + "を含めて" + limit + "文字以内にしてください（" + count + "文字）");
+		}
+		if (hasTemplateParts) {
+			return Optional.of(TEMPLATE_PARTS_NAME + "を含めて" + limit + "文字以内にしてください（" + count + "文字）");
+		}
+		return Optional.of("キャプションは" + limit + "文字以内です（" + count + "文字）");
+	}
+
+	/** ハッシュタグの数の違反（30個以内なら空） */
+	public List<String> hashtagViolations() {
+		if (hashtagCount() <= Caption.MAX_HASHTAGS) {
+			return List.of();
+		}
+		return List.of("ハッシュタグは" + Caption.MAX_HASHTAGS + "個までです（" + hashtagCount() + "個）");
 	}
 
 	/** Instagram に渡すキャプション。上限（2,200文字・ハッシュタグ30個）を超えるなら例外 */
 	public Caption toCaption() {
 		return new Caption(text);
-	}
-
-	private String lengthViolation() {
-		String limit = String.format(Locale.JAPAN, "%,d", Caption.MAX_LENGTH);
-		String count = String.format(Locale.JAPAN, "%,d", length());
-		if (!noticeNames.isEmpty()) {
-			return String.join("と", noticeNames) + "を含めて" + limit + "文字以内にしてください（" + count + "文字）";
-		}
-		if (hasTemplateParts) {
-			return TEMPLATE_PARTS_NAME + "を含めて" + limit + "文字以内にしてください（" + count + "文字）";
-		}
-		return "キャプションは" + limit + "文字以内です（" + count + "文字）";
 	}
 
 	private static int codePoints(String value) {

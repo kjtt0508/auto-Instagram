@@ -49,8 +49,9 @@ public final class Post {
 
 	/** 公開してよい内容か。公開用キャプション（PR表記・AI生成の表示込み）と画像を検査し、理由を列挙する */
 	public List<String> violationsForPublishing(PostMediaList prepared, ImageSpec spec, String prLabel) {
-		List<String> violations = new ArrayList<>(content.media().violationsFor(content.format(), spec));
-		if (prepared.count() != content.media().count()) {
+		PostRevision revision = content.revision();
+		List<String> violations = new ArrayList<>(revision.violationsOfSourceImages(content.format(), spec));
+		if (prepared.count() != revision.expectedPublishMediaCount()) {
 			violations.add("公開用画像の枚数が承認された版と一致しません");
 		}
 		violations.addAll(content.revision().publishCaption(prLabel).violations());
@@ -111,8 +112,14 @@ public final class Post {
 		return content.format();
 	}
 
-	public PostMediaList approvedMedia() {
-		return content.media();
+	/** 公開用画像の準備のしかた（複製か画像化か） */
+	public RevisionContent.Preparation preparation() {
+		return content.revision().preparation();
+	}
+
+	/** 複製の準備で、まだ公開用の保存先に複製していない承認された版の画像 */
+	public List<PostMedia> originalsNotYetIn(PostMediaList prepared) {
+		return content.revision().originalsNotYetIn(prepared);
 	}
 
 	/** 投稿IDと、投稿が属する団体 */
@@ -135,11 +142,6 @@ public final class Post {
 		/** 写真をアップロードした投稿の内容 */
 		public ApprovedContent(UUID revisionId, PostFormat format, Caption caption, PrCategory prCategory, PostMediaList media) {
 			this(revisionId, format, PostRevision.ofPhotos(caption, prCategory, media));
-		}
-
-		/** 投稿画像一覧（テンプレートの投稿では空） */
-		public PostMediaList media() {
-			return revision.photos();
 		}
 	}
 

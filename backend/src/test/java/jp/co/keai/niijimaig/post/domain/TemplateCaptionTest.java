@@ -30,7 +30,7 @@ class TemplateCaptionTest {
 		Optional<MaterialImage> material = c.path("aiDisclosure").asBoolean(false)
 				? Optional.of(SlideSamples.material(ImageStyle.PHOTOREALISTIC)) : Optional.empty();
 		return PostRevision.ofSlides(new Caption(body.toString()), PrCategory.valueOf(c.get("prCategory").asString()),
-				SlideSamples.slides(List.of(SlideSamples.body(material))), SlideSamples.settings(), additional);
+				SlideSamples.slides(List.of(SlideSamples.body(material))), SlideSamples.TEMPLATE_VERSION, SlideSamples.settings(), additional);
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -59,9 +59,9 @@ class TemplateCaptionTest {
 	@DisplayName("AC-002-18 キャプション本文に使える文字数は、付記・定型・ハッシュタグを除いた分（本文の長さによらない）")
 	void remainingForCaption() {
 		PostRevision plain = PostRevision.ofSlides(new Caption("あ"), PrCategory.NONE, SlideSamples.slides(List.of(SlideSamples.body(Optional.empty()))),
-				SlideSamples.settings(), List.of());
+				SlideSamples.TEMPLATE_VERSION, SlideSamples.settings(), List.of());
 		PostRevision pr = PostRevision.ofSlides(new Caption("あいう"), PrCategory.PR, SlideSamples.slides(List.of(SlideSamples.body(Optional.empty()))),
-				SlideSamples.settings(), List.of());
+				SlideSamples.TEMPLATE_VERSION, SlideSamples.settings(), List.of());
 
 		assertThat(plain.publishCaption(PR_LABEL).remainingForCaption()).isEqualTo(2114);
 		assertThat(pr.publishCaption(PR_LABEL).remainingForCaption()).isEqualTo(2109);
@@ -93,7 +93,87 @@ class TemplateCaptionTest {
 				.containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg");
 		PostRevision photos = PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, new PostMediaList(List.of()));
 		assertThat(photos.imageRefs()).isEmpty();
-		assertThat(photos.slides()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-002-02 公開用画像の枚数と準備のしかたは中身が決める（写真は投稿画像の枚数を複製、テンプレートはスライドの枚数を画像化）")
+	void expectedMediaCountAndPreparation() {
+		PostRevision photos = PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, CaptionTest.mediaOf(null));
+		PostRevision template = revision(SlideSamples.body(Optional.empty()));
+
+		assertThat(photos.expectedPublishMediaCount()).isEqualTo(1);
+		assertThat(photos.preparation()).isEqualTo(RevisionContent.Preparation.COPY);
+		assertThat(template.expectedPublishMediaCount()).isEqualTo(3);
+		assertThat(template.preparation()).isEqualTo(RevisionContent.Preparation.RENDER);
+	}
+
+	@Test
+	@DisplayName("AC-002-19 承認時の確認は、写真風の生成画像を含む中身（投稿画像・素材画像）だけに要る")
+	void approvalCheck() {
+		assertThat(PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, CaptionTest.mediaOf(ImageStyle.PHOTOREALISTIC))
+				.needsApprovalCheck()).isTrue();
+		assertThat(PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, CaptionTest.mediaOf(ImageStyle.ILLUSTRATION))
+				.needsApprovalCheck()).isFalse();
+		assertThat(revision(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.PHOTOREALISTIC)))).needsApprovalCheck()).isTrue();
+		assertThat(revision(SlideSamples.body(Optional.of(SlideSamples.material(null)))).needsApprovalCheck()).isFalse();
+	}
+
+	@Test
+	@DisplayName("AC-002-02 公開の検査は、準備済みの枚数を中身が決める公開用画像の枚数と比べる（テンプレートの投稿はスライドの枚数）")
+	void publishingChecksExpectedCount() {
+		PostRevision template = revision(SlideSamples.body(Optional.empty()));
+		Post post = new Post(new Post.Identity(java.util.UUID.randomUUID(), java.util.UUID.randomUUID()), PostStatus.SCHEDULED,
+				new Post.ApprovedContent(java.util.UUID.randomUUID(), PostFormat.CAROUSEL, template),
+				ScheduledAt.restore(java.time.Instant.parse("2026-11-03T01:00:00Z")));
+
+		assertThat(post.violationsForPublishing(CaptionTest.oneMedia(), new ImageSpec(), PR_LABEL))
+				.containsExactly("公開用画像の枚数が承認された版と一致しません");
+	}
+
+	@Test
+	@DisplayName("AC-002-17 投稿の版の各要素は必須。追加のハッシュタグは0〜5個で、どれもハッシュタグの形")
+	void revisionGuards() {
+		SlideList slides = SlideSamples.slides(List.of(SlideSamples.body(Optional.empty())));
+		PostStyleSettings settings = SlideSamples.settings();
+		String v = SlideSamples.TEMPLATE_VERSION;
+		assertThatThrownBy(() -> PostRevision.ofSlides(null, PrCategory.NONE, slides, v, settings, List.of()))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), null, slides, v, settings, List.of()))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, null, v, settings, List.of()))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, " ", settings, List.of()))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, v, null, List.of()))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, v, settings, null))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, null))
+				.isInstanceOf(IllegalArgumentException.class);
+
+		List<String> five = List.of("#a", "#b", "#c", "#d", "#e");
+		assertThat(PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, v, settings, five).publishCaption(PR_LABEL).text())
+				.contains("#e");
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, v, settings,
+				List.of("#a", "#b", "#c", "#d", "#e", "#f"))).hasMessageContaining("追加のハッシュタグは5個までです（6個）");
+		assertThatThrownBy(() -> PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, slides, v, settings, List.of("学割")))
+				.hasMessageContaining("ハッシュタグの形が正しくありません");
+	}
+
+	@Test
+	@DisplayName("AC-002-15 過去の投稿の表紙・スライドの文言・表紙の文言は、検査する of か記録から戻す restore で作る")
+	void creationPaths() {
+		var own = java.util.UUID.randomUUID();
+		assertThatThrownBy(() -> PastPostCover.of(own, "t/a.jpg", own)).hasMessageContaining("投稿自身");
+		assertThatThrownBy(() -> PastPostCover.restore(null, "t/a.jpg")).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> SlideText.of("", "説明", List.of())).isInstanceOf(IllegalArgumentException.class);
+		assertThat(SlideText.restore("", "説明", List.of()).heading()).isEmpty();
+		assertThatThrownBy(() -> SlideText.restore(null, "説明", List.of())).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> CoverText.restore(new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", "GREEN")))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThat(CoverText.restore(new CoverText.Parts("対象外", "期末試験", "", "まとめたよ", "RED")).target()).isEqualTo("対象外");
+		assertThatThrownBy(() -> CoverText.of(new CoverText.Parts("対象外", "期末試験", "", "まとめたよ", "RED"), SlideSamples.settings()))
+				.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
@@ -114,6 +194,7 @@ class TemplateCaptionTest {
 	}
 
 	private static PostRevision revision(BodyContent body) {
-		return PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, SlideSamples.slides(List.of(body)), SlideSamples.settings(), List.of());
+		return PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE, SlideSamples.slides(List.of(body)), SlideSamples.TEMPLATE_VERSION,
+				SlideSamples.settings(), List.of());
 	}
 }

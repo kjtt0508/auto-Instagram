@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../../../docs/model/fixtures/caption.json";
-import { sampleBody, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
+import { SAMPLE_TEMPLATE_VERSION, sampleBody, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
 import { Caption } from "./Caption";
 import { GeneratedImage } from "./GeneratedImage";
+import { Hashtag } from "./Hashtag";
 import { Post } from "./Post";
 import { PostFormat } from "./PostFormat";
 import { PostMedia } from "./PostMedia";
@@ -70,13 +71,19 @@ describe("キャプション・PR表記・AI生成の表示（fixtures/caption.j
   });
 });
 
+describe("ハッシュタグの形（fixtures/caption.json の hashtagForms。全角空白・NBSP も空白）", () => {
+  it.each(fixture.hashtagForms)("$id $name", (c) => {
+    expect(Hashtag.parse(c.text) !== undefined).toBe(c.valid);
+  });
+});
+
 describe("テンプレートの投稿の公開用キャプション（fixtures/caption.json の templateCases）", () => {
   const revisionOf = (c: (typeof fixture.templateCases)[number]) => {
     const body = c.body ?? textOf(c.segments ?? []);
     const bodies = c.aiDisclosure ? [sampleBody(sampleMaterial("PHOTOREALISTIC"))] : undefined;
     return PostRevision.ofSlides({
       caption: Caption.restore(body), prCategory: PrCategory.from(c.prCategory), slides: sampleSlides(bodies),
-      settings: sampleSettings(), additionalHashtags: c.additionalHashtags,
+      templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: c.additionalHashtags,
     });
   };
 
@@ -96,7 +103,7 @@ describe("テンプレートの投稿の公開用キャプション（fixtures/c
 
   it("AC-002-18 キャプション本文に使える文字数は、付記・定型・ハッシュタグを除いた分（本文の長さによらない）", () => {
     const remaining = (body: string, prCategory: PrCategory) => PostRevision.ofSlides({ caption: Caption.restore(body), prCategory,
-      slides: sampleSlides(), settings: sampleSettings(), additionalHashtags: [] }).publishCaption(fixture.prLabel).remainingForCaption();
+      slides: sampleSlides(), templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: [] }).publishCaption(fixture.prLabel).remainingForCaption();
     expect(remaining("あ", PrCategory.NONE)).toBe(2114);
     expect(remaining("あいう", PrCategory.NONE)).toBe(2114);
     expect(remaining("あ", PrCategory.PR)).toBe(2109);

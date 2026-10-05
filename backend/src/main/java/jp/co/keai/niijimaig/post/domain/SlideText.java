@@ -10,7 +10,7 @@ import java.util.List;
  * 同じ語が説明文に複数あるときは、前の強調する語と重ならない最初の位置に当てはめる。
  * TS の SlideText と揃える（docs/model/fixtures/slide-text.json）
  */
-public record SlideText(String heading, String description, List<String> emphases) {
+public final class SlideText {
 
 	static final int HEADING_MAX = 16;
 	static final int DESCRIPTION_MAX = 120;
@@ -29,11 +29,44 @@ public record SlideText(String heading, String description, List<String> emphase
 	private record Placement(List<Range> ranges, List<String> empty, List<String> missing, List<String> overlapping) {
 	}
 
-	public SlideText {
+	private final String heading;
+	private final String description;
+	private final List<String> emphases;
+
+	private SlideText(String heading, String description, List<String> emphases) {
 		if (heading == null || description == null || emphases == null) {
 			throw new IllegalArgumentException("スライドの文言の項目は必須");
 		}
-		emphases = List.copyOf(emphases);
+		this.heading = heading;
+		this.description = description;
+		this.emphases = List.copyOf(emphases);
+	}
+
+	public String heading() {
+		return heading;
+	}
+
+	public String description() {
+		return description;
+	}
+
+	public List<String> emphases() {
+		return emphases;
+	}
+
+	/** 記録から戻すときは検査しない（過去の版を復元できるように） */
+	public static SlideText restore(String heading, String description, List<String> emphases) {
+		return new SlideText(heading, description, emphases);
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		return o instanceof SlideText t && t.heading.equals(heading) && t.description.equals(description) && t.emphases.equals(emphases);
+	}
+
+	@Override
+	public int hashCode() {
+		return java.util.Objects.hash(heading, description, emphases);
 	}
 
 	/** 満たさない条件（空なら受け付けられる）。AI の出力にも人の書き換えにも同じ検査をかける */
@@ -52,6 +85,9 @@ public record SlideText(String heading, String description, List<String> emphase
 
 	/** 検査して作る。満たさなければ例外（人の入力を保存するとき） */
 	public static SlideText of(String heading, String description, List<String> emphases) {
+		if (heading == null || description == null || emphases == null) {
+			throw new IllegalArgumentException("スライドの文言の項目は必須");
+		}
 		List<String> violations = violationsOf(heading, description, emphases);
 		if (!violations.isEmpty()) {
 			throw new IllegalArgumentException(String.join("\n", violations));
