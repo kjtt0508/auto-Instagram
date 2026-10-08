@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 class TemplateVersionFilesTest {
 
 	private static final Map<String, String> NIIJIMA_1 = Map.of(
-			"index.html", "e619037a0afdde5cfbb02a73b7a08b7ae76f90a5d776286a55e91e4055eaf109",
-			"style.css", "2715bf4ed1b7bde70f69e8bc5e1265aaba28ecfbe9941510c9d578ec93c7bc37",
-			"render.js", "43facc685cfc375feb183f1d70081966d6d6be90b44152d2279a2649257725b0",
+			"index.html", "7494261b0e487b106e417f168ecfe1faaaaa791188fb0f0275a0c9f21137ecef",
+			"style.css", "40f849ad057039f3dff10a0e904b659f7c28217f22ecf9688e30ec126165f2ca",
+			"render.js", "d767a58ff12a2be9990935cdf9364d08224229a04d46555294f7538596e87618",
 			"fonts/NotoSansJP-Bold.woff2", "a7fc013ef6deb7a3233b8046a974ab4618f3effba5e6c56cec8478270a3baad7",
 			"fonts/NotoSansJP-Black.woff2", "dd06d9f9ad6af828f41921e56992ccfd142831020348e557117ba1752164ae87",
 			"fonts/NotoColorEmoji.woff2", "4cc3b6133fcf1b56e537130c1ebe61959848d477f3938d5c0d2717aad371ffbe",

@@ -26,15 +26,19 @@ body { font-family: "Noto Sans JP", "Noto Color Emoji", sans-serif; font-weight:
 .cover-line { position: absolute; left: 0; top: 68px; width: 1080px; height: 2px; background: #3a5bd9; }
 .cover-photo { position: absolute; left: 0; top: 70px; width: 1080px; height: 1105px; overflow: hidden; background: var(--navy); }
 .cover-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.cover-shade { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); }
-.cover-frame { position: absolute; left: 32px; top: 102px; width: 1016px; height: 1041px; border: 2px solid #fff; }
-.target { top: 280px; height: 285px; line-height: 285px; font-weight: 900; }
-.annotation { top: 515px; height: 70px; line-height: 66px; font-weight: 700; }
+/* 写真は全体を黒35%、白い枠の中はさらに黒40%（合わせて約61%）にして、文字が埋もれないようにする */
+.cover-shade { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); }
+.cover-frame { position: absolute; left: 32px; top: 102px; width: 1016px; height: 1041px; border: 2px solid #fff; background: rgba(0, 0, 0, 0.4); }
+/* 3段は枠の縦の中央（y=622）付近にまとめる。字の高さは上限つき（画像の高さの約9〜9.5%）で、行の枠は重ねて詰める */
+.target { top: 330px; height: 190px; line-height: 190px; font-weight: 900; }
+.annotation { top: 505px; height: 60px; line-height: 56px; font-weight: 700; }
 .annotation.split { display: flex; justify-content: space-between; border-bottom: 2px solid rgba(255, 255, 255, 0.85); }
 .annotation span { flex: none; }
-.keyword { top: 585px; height: 255px; line-height: 255px; font-weight: 900; color: var(--yellow); }
-.closing-row { top: 800px; height: 250px; font-weight: 900; }
-.closing-words { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; padding: 0 0.3em; line-height: 1.25; border-radius: 6px; text-shadow: 0 4px 8px rgba(0, 0, 0, 0.45); background: linear-gradient(90deg, var(--accent-start), var(--accent-end)); }
+.keyword { top: 578px; height: 185px; line-height: 185px; font-weight: 900; color: var(--yellow); }
+.closing-row { top: 725px; height: 190px; font-weight: 900; }
+/* 帯は文字の下側の約65%だけに敷く（蛍光ペンの下線のように、文字の上部は帯からはみ出す） */
+.closing-words { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; padding: 0 0.12em; line-height: 1.25; text-shadow: 0 0.06em 0.03em rgba(0, 0, 0, 0.85);
+  background: linear-gradient(90deg, var(--accent-start), var(--accent-end)) left bottom / 100% 65% no-repeat; }
 
 /* 中のスライド */
 .backdrop { position: absolute; inset: -80px; width: calc(100% + 160px); height: calc(100% + 160px); object-fit: cover; filter: blur(40px); }
@@ -49,9 +53,13 @@ body { font-family: "Noto Sans JP", "Noto Color Emoji", sans-serif; font-weight:
 .em { color: var(--red); font-weight: 900; }
 
 /* 最後のスライド */
-.closing-message { position: absolute; left: 70px; top: 130px; width: 940px; height: 330px; overflow: hidden; text-align: center; white-space: pre-line; line-height: 1.5; font-weight: 900; overflow-wrap: anywhere; }
-.covers { position: absolute; left: 70px; top: 490px; width: 940px; height: 480px; display: flex; justify-content: center; gap: 40px; }
-.covers img { height: 480px; width: 384px; object-fit: cover; border-radius: 20px; display: block; }
-.account { position: absolute; left: 70px; top: 1020px; width: 940px; height: 200px; display: flex; align-items: center; gap: 36px; }
-.logo { flex: 0 0 150px; width: 150px; height: 150px; border-radius: 50%; object-fit: cover; }
-.intro { flex: 1 1 auto; height: 200px; overflow: hidden; white-space: pre-line; line-height: 1.5; overflow-wrap: anywhere; }
+#canvas[data-role="CLOSING"] { background: #E6E6E8; }
+.closing-message { position: absolute; left: 60px; top: 98px; width: 960px; height: 228px; overflow: hidden; text-align: center; white-space: pre-line; line-height: 1.5; font-weight: 900; color: var(--navy); overflow-wrap: anywhere; }
+.divider { position: absolute; left: 60px; top: 334px; width: 960px; height: 0; border-top: 5px dotted var(--navy); }
+.covers { position: absolute; left: 60px; top: 358px; width: 960px; height: 500px; display: flex; justify-content: center; gap: 40px; }
+.covers img { height: 500px; width: 400px; object-fit: cover; display: block; }
+.intro { position: absolute; left: 60px; top: 884px; width: 960px; height: 104px; padding: 0 24px; background: #fff; color: var(--navy); line-height: 104px; text-align: center; white-space: nowrap; overflow: hidden; font-weight: 900; }
+.account { position: absolute; left: 60px; top: 1012px; width: 960px; height: 274px; display: flex; align-items: center; justify-content: center; gap: 36px; }
+.logo { flex: 0 0 200px; width: 200px; height: 200px; border-radius: 50%; object-fit: cover; }
+.bullets { flex: 1 1 auto; min-width: 0; max-height: 274px; height: 274px; overflow: hidden; list-style: none; color: var(--navy); font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; display: flex; flex-direction: column; justify-content: center; }
+.bullets li::before { content: "・"; }

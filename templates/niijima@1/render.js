@@ -100,7 +100,15 @@
 
   function fillClosing(slide, settings, images) {
     setText("closing-message", settings.closingMessage);
-    setText("closing-intro", settings.accountIntroduction);
+    // 1行目は白い枠の紹介、2行目以降は箇条書き
+    const lines = String(settings.accountIntroduction || "").split(/\r?\n/);
+    setText("closing-intro", lines[0]);
+    for (const line of lines.slice(1)) {
+      if (line.trim() === "") continue;
+      const item = document.createElement("li");
+      item.textContent = line;
+      $("closing-bullets").appendChild(item);
+    }
     if (settings.logo) showImage($("closing-logo"), imageOf(images, settings.logo));
     for (const ref of slide.pastPosts || []) {
       const img = document.createElement("img");
@@ -117,6 +125,7 @@
     $("body-description").textContent = "";
     $("cover-shade").hidden = true;
     $("closing-covers").textContent = "";
+    $("closing-bullets").textContent = "";
     $("body-material").removeAttribute("src");
     for (const id of ["cover-bg", "body-backdrop", "closing-logo"]) {
       const img = $(id);
