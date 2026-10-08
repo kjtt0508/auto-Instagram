@@ -26,7 +26,7 @@ import jp.co.keai.niijimaig.support.SupabaseFixture.LoggedIn;
 @ActiveProfiles("test")
 class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 
-	static final String ACTIVE = "select version_no, body from active_prompt_versions where tenant_id = ? and purpose = ?";
+	static final String ACTIVE ="select version_no, body from active_prompt_versions where tenant_id = ? and purpose = ?";
 
 	@Test
 	@DisplayName("AC-002-21 プロンプトの初版（PLAN・REVISE）は、絵の指示に固有名詞・商標・実在の人物を入れない・差し替えが必要の印を付ける・ネタに無い事実を書かない、の指示を含む")
@@ -43,6 +43,14 @@ class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 					.contains("ネタに無い事実を書かないこと")
 					.contains("{{ideaText}}");
 			assertThat(body).as(purpose + " は団体の文面を含まない").doesNotContain("新島").doesNotContain("同志社");
+				assertThat(body).as(purpose + " は団体によらない言い方（前置き・締めの言葉の例を書かない）")
+						.doesNotContain("大学生向けSNSメディア").doesNotContain("まとめたよ").doesNotContain("紹介します");
+				assertThat(body.replaceAll("\\{\\{[^{}]*}}", "")).as(purpose + " は文字数・個数の上限を数値で書かない（{{limits}} に任せる）")
+						.doesNotContainPattern("[0-9０-９]");
+				assertThat(body).as(purpose + " は帯の色の例を二重に書かない（{{accentColors}} だけ）").contains("{{accentColors}}")
+						.doesNotContain("PURPLE").doesNotContain("TEAL");
+				assertThat(body).as(purpose).contains("{{limits}}").contains("{{coverTargets}}")
+						.contains("picturePrompt").contains("needsReplacement").doesNotContain("pictureBrief");
 		}
 		assertThat(db.<String>as(editor, j -> j.queryForObject(ACTIVE.replace("version_no, body", "body"), String.class, tenant, "PLAN"))).contains("{{backgroundPhotos}}");
 		assertThat(db.<String>as(editor, j -> j.queryForObject(ACTIVE.replace("version_no, body", "body"), String.class, tenant, "REVISE"))).contains("{{instruction}}");
@@ -66,12 +74,13 @@ class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 		jdbc.queryForList("select app.seed_initial_prompts(?)", tenant);
 		UUID first = jdbc.queryForObject("select prompt_version_id from active_prompt_versions where tenant_id = ? and purpose = 'PLAN'", UUID.class, tenant);
 
-		UUID second = db.as(admin, j -> j.queryForObject("select public.create_prompt_version('PLAN', '新しい本文')", UUID.class));
+		String newBody = initialBody("PLAN") + "\n- 新しい指示";
+		UUID second = db.as(admin, j -> j.queryForObject("select public.create_prompt_version('PLAN', ?)", UUID.class, newBody));
 		assertThat(db.<Integer>as(editor, j -> j.queryForObject(ACTIVE, (rs, i) -> rs.getInt("version_no"), tenant, "PLAN"))).isEqualTo(1);
 		db.as(admin, j -> j.queryForList("select public.activate_prompt_version(?)", second));
 
 		Map<String, Object> active = db.as(editor, j -> j.queryForMap(ACTIVE, tenant, "PLAN"));
-		assertThat(active).containsEntry("version_no", 2).containsEntry("body", "新しい本文");
+		assertThat(active).containsEntry("version_no", 2).containsEntry("body", newBody);
 		assertThat(jdbc.queryForList("select version_no from prompt_versions where tenant_id = ? and purpose = 'PLAN' order by version_no", Integer.class, tenant))
 				.containsExactly(1, 2);
 		assertThat(jdbc.queryForObject("select body from prompt_versions where id = ?", String.class, first)).contains("ネタに無い事実を書かないこと");
@@ -106,10 +115,11 @@ class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 	@DisplayName("AC-002-08 同時に版を作っても版番号は重ならず連番になる")
 	void concurrentVersionCreationIsSerialized() throws Exception {
 		jdbc.queryForList("select app.seed_initial_prompts(?)", tenant);
+		String planBody = initialBody("PLAN");
 		ExecutorService pool = Executors.newFixedThreadPool(4);
 		List<Callable<UUID>> calls = new ArrayList<>();
 		for (int i = 0; i < 8; i++) {
-			calls.add(() -> db.as(admin, j -> j.queryForObject("select public.create_prompt_version('PLAN', '本文')", UUID.class)));
+			calls.add(() -> db.as(admin, j -> j.queryForObject("select public.create_prompt_version('PLAN', ?)", UUID.class, planBody)));
 		}
 		for (Future<UUID> f : pool.invokeAll(calls)) {
 			f.get();
@@ -134,8 +144,8 @@ class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 				child, tenant, editor.memberId(), idea, prompt, attempts, parent));
 		UUID quota = UUID.randomUUID();
 		db.asServiceRole(j -> j.queryForList(
-				"select public.record_generation(?, ?, ?, 'REVISE', 'API', ?, ?, '{}'::jsonb, 'QUOTA_EXCEEDED', '[]'::jsonb, null, null, null)",
-				quota, tenant, editor.memberId(), idea, prompt));
+				"select public.record_generation(?, ?, ?, 'REVISE', 'API', ?, ?, '{}'::jsonb, 'QUOTA_EXCEEDED', '[]'::jsonb, null, ?, 'もっと短く')",
+				quota, tenant, editor.memberId(), idea, prompt, parent));
 
 		assertThat(jdbc.queryForList("select attempt_no from generation_attempts where generation_id = ? order by attempt_no", Integer.class, child)).containsExactly(1, 2);
 		assertThat(jdbc.queryForObject("select parent_generation_id from generation_revisions where generation_id = ?", UUID.class, child)).isEqualTo(parent);

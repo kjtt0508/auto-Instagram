@@ -33,12 +33,13 @@ public record PostStyleSettings(UUID tenantId, int version, String bandText, Lis
 		return coverTargets.contains(target);
 	}
 
-	/** 画像化でテンプレートに渡す固定の文言（上端の帯・最後のスライドの定型文・アカウントの紹介） */
+	/** 画像化でテンプレートに渡す固定の文言（上端の帯・最後のスライドの定型文・アカウントの紹介）とロゴの画像の参照 */
 	public Map<String, Object> renderValues() {
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put("bandText", bandText);
 		values.put("closingMessage", closingMessage);
 		values.put("accountIntroduction", accountIntroduction);
+		logoStoragePath.ifPresent(path -> values.put("logo", path));
 		return values;
 	}
 }

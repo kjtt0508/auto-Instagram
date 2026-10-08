@@ -21,10 +21,10 @@ describe("表紙の文言（fixtures/slide-text.json）", () => {
     expect(CoverText.of(parts, sampleSettings()).keyword).toBe(parts.keyword);
   });
 
-  it("AC-002-22 人がキーワードを11文字に書き換えると保存できず、理由が出る", () => {
-    const parts = partsOf({ keyword: "あ".repeat(11) });
-    expect(CoverText.violationsOf(parts, sampleSettings())).toEqual(["キーワードは1〜10文字にしてください（11文字）"]);
-    expect(() => CoverText.of(parts, sampleSettings())).toThrow("キーワードは1〜10文字");
+  it("AC-002-22 人がキーワードを13文字に書き換えると保存できず、理由が出る", () => {
+    const parts = partsOf({ keyword: "あ".repeat(13) });
+    expect(CoverText.violationsOf(parts, sampleSettings())).toEqual(["キーワードは1〜12文字にしてください（13文字）"]);
+    expect(() => CoverText.of(parts, sampleSettings())).toThrow("キーワードは1〜12文字");
   });
 
   it("記録から戻すときは対象の候補を検査しない（設定の候補が後で変わっても過去の版を復元できる）", () => {

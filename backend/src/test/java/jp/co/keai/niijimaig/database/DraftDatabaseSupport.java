@@ -176,6 +176,11 @@ abstract class DraftDatabaseSupport {
 		return db.as(admin, j -> j.queryForObject("select public.register_background_photo(?, ?)", UUID.class, path, description));
 	}
 
+	/** 初版の本文（差し込み値が正しくそろった本文として、新しい版の作成に使う） */
+	String initialBody(String purpose) {
+		return jdbc.queryForObject("select app.initial_prompt_body(?)", String.class, purpose);
+	}
+
 	/** プロンプトの初版を入れ、ネタ1件・生成1件（PLAN・API）を service role で記録する。戻り値は生成ID */
 	UUID recordGeneration(String outcome) {
 		jdbc.queryForList("select app.seed_initial_prompts(?)", tenant);

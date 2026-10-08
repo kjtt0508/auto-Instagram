@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.post.domain;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -43,6 +44,21 @@ public sealed interface RevisionContent {
 
 	/** 複製の準備で、まだ公開用の保存先に複製していない元の画像（複製しない形では無し） */
 	List<PostMedia> originalsNotYetIn(PostMediaList prepared);
+
+	/**
+	 * 中身が満たさない条件（スライド構成の並びと枚数は SlideList が作るときに守るので、ここでは追加のハッシュタグ）。
+	 * 記録から戻すときは検査しないので、承認を依頼するとき・公開するときに呼び出し側がこれを確かめる
+	 */
+	List<String> violations();
+
+	/** 画像化に使うテンプレートの版の名前（写真の投稿は無し） */
+	Optional<String> renderTemplateVersion();
+
+	/** 画像化でテンプレートに渡すスライドごとの値（最後のスライドには承認で選んだ過去の投稿を載せる。写真の投稿は無し） */
+	List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts);
+
+	/** 画像化でテンプレートに渡す投稿の型の設定の値（写真の投稿は無し） */
+	Map<String, Object> settingsRenderValues();
 
 	/** 写真をアップロードした投稿の中身 */
 	record PhotoPost(PostMediaList media) implements RevisionContent {
@@ -97,9 +113,33 @@ public sealed interface RevisionContent {
 		public List<PostMedia> originalsNotYetIn(PostMediaList prepared) {
 			return media.notYetIn(prepared);
 		}
+
+		@Override
+		public List<String> violations() {
+			return List.of();
+		}
+
+		@Override
+		public Optional<String> renderTemplateVersion() {
+			return Optional.empty();
+		}
+
+		@Override
+		public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
+			return List.of();
+		}
+
+		@Override
+		public Map<String, Object> settingsRenderValues() {
+			return Map.of();
+		}
 	}
 
-	/** テンプレートの投稿の中身。templateVersion は使うテンプレートの版の名前（例 niijima@1） */
+	/**
+	 * テンプレートの投稿の中身。templateVersion は使うテンプレートの版の名前（例 niijima@1）。
+	 * 追加のハッシュタグの個数・形は、コンストラクタ（記録から戻す経路）では検査しない（DB は形だけを検査して保存するので、
+	 * 読み戻しで止まらないように）。満たさない条件は violations() で返す。新しく作るときは of が検査する
+	 */
 	record TemplatePost(SlideList slides, String templateVersion, PostStyleSettings settings, List<String> additionalHashtags)
 			implements RevisionContent {
 
@@ -107,11 +147,17 @@ public sealed interface RevisionContent {
 			if (slides == null || templateVersion == null || templateVersion.isBlank() || settings == null || additionalHashtags == null) {
 				throw new IllegalArgumentException("スライド構成・テンプレートの版・投稿の型の設定・追加のハッシュタグは必須");
 			}
-			List<String> violations = settings.fixedHashtags().violationsOfAdditional(additionalHashtags);
+			additionalHashtags = List.copyOf(additionalHashtags);
+		}
+
+		/** 新しく作る: 追加のハッシュタグを検査し、満たさなければ例外 */
+		static TemplatePost of(SlideList slides, String templateVersion, PostStyleSettings settings, List<String> additionalHashtags) {
+			TemplatePost content = new TemplatePost(slides, templateVersion, settings, additionalHashtags);
+			List<String> violations = content.violations();
 			if (!violations.isEmpty()) {
 				throw new IllegalArgumentException(String.join("\n", violations));
 			}
-			additionalHashtags = List.copyOf(additionalHashtags);
+			return content;
 		}
 
 		@Override
@@ -139,9 +185,10 @@ public sealed interface RevisionContent {
 			return Optional.of(settings.captionFooter());
 		}
 
+		/** ハッシュタグの形でないものは足さない（形の違反は violations() が返し、公開は止まる） */
 		@Override
 		public List<String> hashtags() {
-			return settings.fixedHashtags().mergedWith(additionalHashtags);
+			return settings.fixedHashtags().mergedWith(additionalHashtags.stream().filter(Hashtag::isHashtag).toList());
 		}
 
 		@Override
@@ -159,6 +206,26 @@ public sealed interface RevisionContent {
 		@Override
 		public List<PostMedia> originalsNotYetIn(PostMediaList prepared) {
 			return List.of();
+		}
+
+		@Override
+		public List<String> violations() {
+			return settings.fixedHashtags().violationsOfAdditional(additionalHashtags);
+		}
+
+		@Override
+		public Optional<String> renderTemplateVersion() {
+			return Optional.of(templateVersion);
+		}
+
+		@Override
+		public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
+			return slides.withPastPosts(pastPosts).renderValues();
+		}
+
+		@Override
+		public Map<String, Object> settingsRenderValues() {
+			return settings.renderValues();
 		}
 	}
 }

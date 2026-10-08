@@ -161,6 +161,22 @@ class TemplateCaptionTest {
 	}
 
 	@Test
+	@DisplayName("AC-002-17 記録から戻す restoreSlides は追加のハッシュタグを検査せず、違反は violations() で返す。公開は止まる")
+	void restoreDoesNotCheckHashtags() {
+		SlideList slides = SlideSamples.slides(List.of(SlideSamples.body(Optional.empty())));
+		PostRevision restored = PostRevision.restoreSlides(new Caption("本文"), PrCategory.NONE, slides, SlideSamples.TEMPLATE_VERSION,
+				SlideSamples.settings(), List.of("#a", "#b", "#c", "#d", "#e", "#f", "学割"));
+
+		assertThat(restored.violations()).containsExactly("追加のハッシュタグは5個までです（7個）", "ハッシュタグの形が正しくありません: 学割");
+		assertThat(restored.publishCaption(PR_LABEL).text()).contains("#f").doesNotContain("学割");
+		Post post = new Post(new Post.Identity(java.util.UUID.randomUUID(), java.util.UUID.randomUUID()), PostStatus.SCHEDULED,
+				new Post.ApprovedContent(java.util.UUID.randomUUID(), PostFormat.CAROUSEL, restored),
+				ScheduledAt.restore(java.time.Instant.parse("2026-11-03T01:00:00Z")));
+		assertThat(post.violationsForPublishing(CaptionTest.oneMedia(), new ImageSpec(), PR_LABEL))
+				.contains("追加のハッシュタグは5個までです（7個）");
+	}
+
+	@Test
 	@DisplayName("AC-002-15 過去の投稿の表紙・スライドの文言・表紙の文言は、検査する of か記録から戻す restore で作る")
 	void creationPaths() {
 		var own = java.util.UUID.randomUUID();

@@ -22,9 +22,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: backend/target/batch.jar
-          key: batch-jar-${{ hashFiles('backend/pom.xml', 'backend/src/main/**') }}
+          key: batch-jar-${{ hashFiles('backend/pom.xml', 'backend/src/main/**', 'templates/**') }}
       - if: steps.jar.outputs.cache-hit != 'true'
         run: ./mvnw -B -q -DskipTests package
+        working-directory: backend
+      # テンプレートの画像化（Playwright の chromium）。ブラウザは版ごとにキャッシュし、無いときだけ入れる（REQ-002 設計 6章）
+      - id: playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('backend/pom.xml') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: ./mvnw -B -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps chromium"
+        working-directory: backend
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: ./mvnw -B -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install-deps chromium"
         working-directory: backend
       - run: java -jar target/batch.jar --job=tick --run-id=${{ github.run_id }}
         working-directory: backend

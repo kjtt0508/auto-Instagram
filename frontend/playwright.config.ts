@@ -8,7 +8,7 @@ export default defineConfig({
   timeout: 30_000,
   use: { baseURL: `http://127.0.0.1:${PORT}`, ...devices["iPhone SE"], browserName: "chromium", viewport: { width: 375, height: 667 } },
   webServer: {
-    command: `npx next build && npx serve out -l ${PORT} --no-clipboard`,
+    command: `npx next build && node scripts/copy-templates.mjs && npx serve out -l ${PORT} --no-clipboard`,
     url: `http://127.0.0.1:${PORT}`,
     timeout: 180_000,
     reuseExistingServer: !process.env.CI,

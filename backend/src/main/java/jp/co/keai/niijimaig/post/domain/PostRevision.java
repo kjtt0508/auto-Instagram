@@ -1,6 +1,8 @@
 package jp.co.keai.niijimaig.post.domain;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * 投稿の版: 投稿の内容の1つの版。投稿の版の中身（写真の投稿は投稿画像一覧、テンプレートの投稿はスライド構成・テンプレートの版・
@@ -28,8 +30,15 @@ public final class PostRevision {
 		return new PostRevision(caption, prCategory, new RevisionContent.PhotoPost(media));
 	}
 
-	/** テンプレートの投稿の版（templateVersion は例 niijima@1。追加のハッシュタグは0〜5個で、どれもハッシュタグの形） */
+	/** テンプレートの投稿の版を新しく作る（templateVersion は例 niijima@1）。追加のハッシュタグは0〜5個で、どれもハッシュタグの形。満たさなければ例外 */
 	public static PostRevision ofSlides(Caption caption, PrCategory prCategory, SlideList slides, String templateVersion,
+			PostStyleSettings settings, List<String> additionalHashtags) {
+		return new PostRevision(caption, prCategory,
+				RevisionContent.TemplatePost.of(slides, templateVersion, settings, additionalHashtags));
+	}
+
+	/** 記録から戻す（追加のハッシュタグは検査しない。DB は形だけを検査して保存するため）。満たさない条件は violations() で返す */
+	public static PostRevision restoreSlides(Caption caption, PrCategory prCategory, SlideList slides, String templateVersion,
 			PostStyleSettings settings, List<String> additionalHashtags) {
 		return new PostRevision(caption, prCategory,
 				new RevisionContent.TemplatePost(slides, templateVersion, settings, additionalHashtags));
@@ -79,5 +88,25 @@ public final class PostRevision {
 	/** 画像化に必要な画像の参照（背景写真・素材画像・ロゴの保存先）。過去の投稿の表紙は承認で決まるので含まない */
 	public List<String> imageRefs() {
 		return content.imageRefs();
+	}
+
+	/** 中身が満たさない条件（追加のハッシュタグの個数・形）。記録から戻すときは検査しないので、公開の前に確かめる */
+	public List<String> violations() {
+		return content.violations();
+	}
+
+	/** 画像化に使うテンプレートの版の名前（写真の投稿は無し） */
+	public Optional<String> templateVersion() {
+		return content.renderTemplateVersion();
+	}
+
+	/** 画像化でテンプレートに渡すスライドごとの値。最後のスライドには承認で選んだ過去の投稿の表紙を載せる */
+	public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
+		return content.slideRenderValues(pastPosts);
+	}
+
+	/** 画像化でテンプレートに渡す投稿の型の設定の値 */
+	public Map<String, Object> settingsRenderValues() {
+		return content.settingsRenderValues();
 	}
 }

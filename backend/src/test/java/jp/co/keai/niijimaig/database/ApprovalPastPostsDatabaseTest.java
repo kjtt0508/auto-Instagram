@@ -158,8 +158,11 @@ class ApprovalPastPostsDatabaseTest extends DraftDatabaseSupport {
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, first)).isEqualTo(2);
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, next)).isEqualTo(1);
 		assertThat(jdbc.queryForObject("select count(*) from template_publish_media where revision_id = ?", Integer.class, revision)).isEqualTo(1);
-		assertRejected(() -> recordRender(first, 1), "23505", "template_renders");
-		assertRejected(() -> recordPublishMedia(revision, first, 1), "23505", "template_publish_media");
+		assertRejected(() -> recordRender(next, 1), "23505", "template_renders");
+		assertRejected(() -> recordPublishMedia(second, next, 1), "23505", "template_publish_media");
+		// 古い承認の出来事には、再承認のあとは記録できない（最新の承認の出来事だけ）
+		assertRejected(() -> recordRender(first, 3), "P0404", "承認の出来事");
+		assertRejected(() -> recordPublishMedia(revision, first, 2), "P0404", "承認の出来事");
 	}
 
 	@Test

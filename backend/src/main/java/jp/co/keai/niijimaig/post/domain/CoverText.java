@@ -8,12 +8,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 表紙の文言: 表紙の3段に描く文言。対象・キーワード（1〜10文字）・添え書き（0〜16文字）・締めの言葉（1〜8文字）と、帯のアクセント色。
+ * 表紙の文言: 表紙の3段に描く文言。対象・キーワード（1〜12文字）・添え書き（0〜16文字）・締めの言葉（1〜8文字）と、帯のアクセント色。
  * 対象は投稿の型の設定の「表紙の対象の候補」のどれか（REQ-002 BR-002-12）。TS の CoverText と揃える（docs/model/fixtures/slide-text.json）
  */
 public final class CoverText {
 
-	static final int KEYWORD_MAX = 10;
+	static final int KEYWORD_MAX = 12;
 	static final int ANNOTATION_MAX = 16;
 	static final int CLOSING_WORDS_MAX = 8;
 

@@ -142,6 +142,8 @@ create table revision_generations (                      -- post_revisions.gener
   generation_id  uuid not null references generations(id)
 );
 
+comment on column post_revisions.generation_id is 'REQ-002 では使わない（常に NULL）。版の元の生成は revision_generations';
+
 create table post_slides (
   id           uuid primary key default gen_random_uuid(),
   revision_id  uuid not null references post_revisions(id),
@@ -632,7 +634,7 @@ $$;
 
 create or replace function public.approve_post(p_post uuid, p_revision uuid, p_scheduled_at timestamptz) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare me record; requested uuid; ev bigint; v_source text;
+declare me record; requested uuid; ev bigint; v_source text; cand record; v_cover text; v_found int := 0;
 begin
   select * into me from app.require_role(array['ADMIN','APPROVER']);
   perform app.lock_own_post(p_post, me.tenant_id);
@@ -646,15 +648,22 @@ begin
   insert into post_schedules (post_id, event_id, scheduled_at, decided_by) values (p_post, ev, p_scheduled_at, me.member_id);
   select r.media_source into v_source from post_revisions r where r.id = p_revision;
   if v_source = 'TEMPLATE' then
-    -- その投稿自身を除き、承認した時点で公開済みの投稿のうち公開日時が新しい2件（0件なら行を作らない）
-    insert into approval_past_posts (approval_event_id, position, past_post_id, cover_storage_path)
-    select ev, (row_number() over (order by c.published_at desc, c.post_id))::int, c.post_id, c.cover
-      from (select pub.post_id, pub.published_at, app.past_post_cover(pub.post_id) as cover
-              from post_publications pub join posts pp on pp.id = pub.post_id
-             where pp.tenant_id = me.tenant_id and pub.post_id <> p_post) c
-     where c.cover is not null
-     order by c.published_at desc, c.post_id
-     limit 2;
+    -- その投稿自身を除き、承認した時点で公開済みの投稿を公開日時の新しい順に見ていき、表紙のある投稿が2件見つかった時点で止める。
+    -- 表紙の無い投稿（画像化の記録が無い・投稿画像が無いなど）は飛ばして、その次に新しい投稿を見る。0件なら行を作らない
+    for cand in
+      select pub.post_id from post_publications pub join posts pp on pp.id = pub.post_id
+       where pp.tenant_id = me.tenant_id and pub.post_id <> p_post
+       order by pub.published_at desc, pub.post_id
+    loop
+      v_cover := app.past_post_cover(cand.post_id);
+      if v_cover is null then
+        continue;
+      end if;
+      v_found := v_found + 1;
+      insert into approval_past_posts (approval_event_id, position, past_post_id, cover_storage_path)
+      values (ev, v_found, cand.post_id, v_cover);
+      exit when v_found = 2;
+    end loop;
   end if;
 end $$;
 
@@ -670,7 +679,7 @@ begin
   if p_description is null or char_length(p_description) not between 1 and 100 then
     raise exception '説明文は1〜100文字で入力してください' using errcode = '22023';
   end if;
-  perform 1 from tenants where id = me.tenant_id for update;         -- 同時登録でも30枚を超えないよう直列化する
+  perform 1 from tenants where id = me.tenant_id for no key update;  -- 同時登録でも30枚を超えないよう直列化する（子表の外部キーの確認とは衝突しない弱いロック）
   if (select count(*) from usable_background_photos u where u.tenant_id = me.tenant_id) >= 30 then
     raise exception '背景写真は使う写真を30枚までです。使わない写真を増やしてから足してください' using errcode = '22023';
   end if;
@@ -708,7 +717,7 @@ begin
   if p_logo_storage_path is not null and p_logo_storage_path !~ ('^' || me.tenant_id::text || '/style/[A-Za-z0-9_-]+\.png$') then
     raise exception 'ロゴの保存先が正しくありません' using errcode = '42501';
   end if;
-  perform 1 from tenants where id = me.tenant_id for update;
+  perform 1 from tenants where id = me.tenant_id for no key update;
   select coalesce(max(s.version), 0) + 1 into v_version from post_style_settings s where s.tenant_id = me.tenant_id;
   insert into post_style_settings (tenant_id, version, band_text, cover_targets, closing_message, account_introduction,
                                    caption_footer, fixed_hashtags, created_by)
@@ -718,6 +727,33 @@ begin
     insert into post_style_logos (style_settings_id, storage_path) values (v_id, p_logo_storage_path);
   end if;
   return v_version;
+end $$;
+
+-- プロンプトの差し込み値の検査（設計 4章の表）。用途の必須の差し込み値がそろい、知らない差し込み値が無いこと（違えば 22023）
+-- CAPTION は REQ-002 では使わないので必須は無く、知っている差し込み値だけを許す
+create function app.require_prompt_placeholders(p_purpose text, p_body text) returns void
+language plpgsql immutable as $$
+declare
+  known text[] := array['today','ideaText','coverTargets','accentColors','backgroundPhotos','limits','currentDraft','instruction','bodySlideCount'];
+  required text[] := case p_purpose
+    when 'PLAN' then array['today','ideaText','coverTargets','accentColors','backgroundPhotos','limits']
+    when 'REVISE' then array['today','ideaText','coverTargets','accentColors','limits','currentDraft','instruction','bodySlideCount']
+    else array[]::text[] end;
+  allowed text[] := case p_purpose
+    when 'PLAN' then array['today','ideaText','coverTargets','accentColors','backgroundPhotos','limits']
+    when 'REVISE' then array['today','ideaText','coverTargets','accentColors','limits','currentDraft','instruction','bodySlideCount']
+    else known end;
+  used text[]; missing text; unknown text;
+begin
+  select coalesce(array_agg(distinct m[1]), array[]::text[]) into used from regexp_matches(p_body, '\{\{([^{}]*)\}\}', 'g') m;
+  select string_agg('{{' || r || '}}', '、') into missing from unnest(required) r where r <> all (used);
+  if missing is not null then
+    raise exception 'プロンプトの本文に必要な差し込み値がありません: %', missing using errcode = '22023';
+  end if;
+  select string_agg('{{' || u || '}}', '、') into unknown from unnest(used) u where u <> all (allowed);
+  if unknown is not null then
+    raise exception 'プロンプトの本文に知らない差し込み値があります: %', unknown using errcode = '22023';
+  end if;
 end $$;
 
 -- 新しい版を作る（有効にはしない。activate_prompt_version で有効にする）
@@ -732,7 +768,8 @@ begin
   if p_body is null or char_length(p_body) < 1 then
     raise exception 'プロンプトの本文を入力してください' using errcode = '22023';
   end if;
-  perform 1 from tenants where id = me.tenant_id for update;
+  perform app.require_prompt_placeholders(p_purpose, p_body);
+  perform 1 from tenants where id = me.tenant_id for no key update;
   select coalesce(max(v.version_no), 0) + 1 into v_no from prompt_versions v
    where v.tenant_id = me.tenant_id and v.purpose = p_purpose;
   insert into prompt_versions (tenant_id, purpose, version_no, body, created_by)
@@ -750,7 +787,7 @@ begin
   if v.id is null then
     raise exception 'プロンプト版が見つかりません' using errcode = 'P0404';
   end if;
-  perform 1 from tenants where id = me.tenant_id for update;
+  perform 1 from tenants where id = me.tenant_id for no key update;
   if exists (select 1 from active_prompt_versions a
               where a.tenant_id = me.tenant_id and a.purpose = v.purpose and a.prompt_version_id = p_id) then
     return;
@@ -792,8 +829,17 @@ begin
   if (p_parent is null) <> (p_instruction is null) then
     raise exception '修正指示は親の生成と一緒に指定してください' using errcode = '22023';
   end if;
+  if (p_purpose = 'REVISE') <> (p_parent is not null) then
+    raise exception '修正指示（REVISE）には親の生成が必要で、それ以外には親の生成を付けられません' using errcode = '22023';
+  end if;
   if p_parent is not null and not exists (select 1 from generations g where g.id = p_parent and g.tenant_id = p_tenant) then
     raise exception '親の生成が見つかりません' using errcode = '22023';
+  end if;
+  if p_parent is not null and not exists (select 1 from generations g where g.id = p_parent and g.idea_id = p_idea) then
+    raise exception '親の生成とネタが違います' using errcode = '22023';
+  end if;
+  if p_route = 'API' and p_outcome in ('SUCCEEDED','INVALID_OUTPUT') and jsonb_array_length(attempts) < 1 then
+    raise exception 'API 経由で出力を得た生成には LLM 呼び出しの記録が必要です' using errcode = '22023';
   end if;
   insert into generations (id, tenant_id, requested_by, purpose, route, idea_id, prompt_version_id, input, outcome)
   values (p_id, p_tenant, p_member, p_purpose, p_route, p_idea, p_prompt_version, p_input, p_outcome);
@@ -816,10 +862,14 @@ create function public.record_template_render(
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare t uuid;
 begin
-  select p.tenant_id into t from post_events e join posts p on p.id = e.post_id
-   where e.id = p_approval_event and e.event_type = 'APPROVED';
+  -- その投稿の最新の承認の出来事で、承認した版が TEMPLATE のものだけ（古い承認・UPLOAD の版には記録しない）
+  select p.tenant_id into t from post_events e
+    join posts p on p.id = e.post_id
+    join post_revisions r on r.id = e.revision_id and r.media_source = 'TEMPLATE'
+   where e.id = p_approval_event and e.event_type = 'APPROVED'
+     and e.id = (select max(l.id) from post_events l where l.post_id = e.post_id and l.event_type = 'APPROVED');
   if t is null then
-    raise exception '承認の出来事が見つかりません' using errcode = 'P0404';
+    raise exception '承認の出来事が見つかりません（最新の承認の出来事で、テンプレートの版のものだけ記録できます）' using errcode = 'P0404';
   end if;
   if p_storage_path is distinct from t::text || '/renders/' || p_approval_event::text || '/' || p_position::text || '.jpg' then
     raise exception '画像化した画像の保存先が正しくありません' using errcode = '22023';
@@ -838,9 +888,10 @@ begin
   select p.tenant_id into t from post_events e
     join posts p on p.id = e.post_id
     join post_revisions r on r.id = e.revision_id and r.media_source = 'TEMPLATE'
-   where e.id = p_approval_event and e.event_type = 'APPROVED' and e.revision_id = p_revision;
+   where e.id = p_approval_event and e.event_type = 'APPROVED' and e.revision_id = p_revision
+     and e.id = (select max(l.id) from post_events l where l.post_id = e.post_id and l.event_type = 'APPROVED');
   if t is null then
-    raise exception '承認の出来事が見つかりません' using errcode = 'P0404';
+    raise exception '承認の出来事が見つかりません（最新の承認の出来事で、テンプレートの版のものだけ記録できます）' using errcode = 'P0404';
   end if;
   if p_storage_path is null or p_storage_path !~ ('^' || t::text || '/[A-Za-z0-9_-]+\.jpg$') then
     raise exception '公開用画像の保存先が正しくありません' using errcode = '22023';
@@ -854,38 +905,39 @@ end $$;
 create function app.initial_prompt_body(p_purpose text) returns text
 language sql immutable as $fn$
   select case p_purpose
-    when 'PLAN' then $plan$あなたは大学生向けSNSメディアの Instagram 投稿を作る担当です。次の「ネタ」から、カルーセル投稿の文言とキャプションを作り、指定した JSON だけを出力してください。説明文やコードブロックの記号は付けません。
+    when 'PLAN' then $plan$あなたは Instagram の投稿を作る担当です。次の「ネタ」から、カルーセル投稿の文言とキャプションを作り、指定した JSON だけを出力してください。説明文やコードブロックの記号は付けません。
 
 # ネタ（箇条書きの情報。今日の日付: {{today}}）
 {{ideaText}}
 
 # 書き方の指示
 - ネタに無い事実を書かないこと。日時・場所・料金・URL・固有名詞は、ネタに書かれているものだけを使い、推測で補わない。
-- 投稿は、表紙1枚・中のスライド1〜8枚・最後のスライド1枚で作る。中のスライドの枚数は、ネタの内容に合わせて決める。最後のスライドは自動で作るので、出力に含めない。
-- 表紙は3段。target は次の候補から1つ選ぶ: {{coverTargets}}。keyword は1〜10文字。annotation は0〜16文字（無ければ空文字）。closingWords は1〜8文字（例: まとめたよ、紹介します）。accent は次から話題に合うものを1つ選ぶ: {{accentColors}}。
-- 表紙の背景写真は、次の候補の説明文から話題に合うものを1つ選び、その ID を backgroundPhotoId に入れる。合うものが無い、または候補が無いときは backgroundPhotoId を空文字にする。
+- 投稿は、表紙・中のスライド・最後のスライドで作る。中のスライドの枚数は、ネタの内容に合わせて決める。最後のスライドは自動で作るので、出力に含めない。
+- 表紙は三段（keyword・annotation・closingWords）。target は次の候補から一つ選ぶ: {{coverTargets}}。annotation は無ければ空文字にする。accent は次から話題に合うものを一つ選ぶ: {{accentColors}}。
+- 文字数・枚数・個数の上限は次のとおり。必ず守る: {{limits}}
+- 表紙の背景写真は、次の候補の説明文から話題に合うものを一つ選び、その ID を backgroundPhotoId に入れる。合うものが無い、または候補が無いときは backgroundPhotoId を空文字にする。
 {{backgroundPhotos}}
-- 中のスライドは、heading（1〜16文字）と description（1〜120文字）で作る。description の中で目立たせたい語を、description に含まれる語そのままで0〜3か所、emphases に入れる。強調する語どうしは重ならないようにする。
-- 文字数は絵文字も1文字と数える。
-- pictureBrief は、そのスライドのカードに載せる素材画像を作るための短い説明を日本語で書く。絵の指示に固有名詞・商標・実在の人物を入れない。一般的な物や場面の言葉に言い換える（例: 特定のアプリ名ではなく「スマートフォンの画面」）。
+- 中のスライドは、heading と description で作る。description の中で目立たせたい語を、description に含まれる語そのままで emphases に入れる。強調する語どうしは重ならないようにする。
+- 文字数は絵文字も一文字と数える。
+- picturePrompt は、そのスライドのカードに載せる素材画像を作るための短い説明を日本語で書く。絵の指示に固有名詞・商標・実在の人物を入れない。一般的な物や場面の言葉に言い換える（例: 特定のアプリ名ではなく「スマートフォンの画面」）。
 - 実在のロゴ・料金表・アプリの画面・実在の施設の写真など、実物が要るスライドには、needsReplacement を true にして差し替えが必要の印を付ける。それ以外は false にする。
-- caption は2〜3段落で、読みやすく簡潔に書く。絵文字を使ってよい。ハッシュタグ・区切り線・運営の紹介は自動で付くので書かない。
-- additionalHashtags は、話題に合うハッシュタグを # 付きで0〜5個。固定のハッシュタグは自動で付くので入れない。
+- caption は数段落で、読みやすく簡潔に書く。絵文字を使ってよい。ハッシュタグ・区切り線・運営の紹介は自動で付くので書かない。
+- additionalHashtags は、話題に合うハッシュタグを # 付きで書く。固定のハッシュタグは自動で付くので入れない。
 - prCategory は、ネタが広告・提携の依頼でなければ NONE、そうであれば PR。
 - sourceUrls は、ネタに参照元の URL があるときだけ入れ、無ければ空の配列にする。ネタに無い URL を作らない。
 
 # 出力 JSON の形
 {
-  "cover": { "target": "", "keyword": "", "annotation": "", "closingWords": "", "accent": "PURPLE | RED | TEAL" },
+  "cover": { "target": "", "keyword": "", "annotation": "", "closingWords": "", "accent": "" },
   "backgroundPhotoId": "",
-  "slides": [ { "heading": "", "description": "", "emphases": [""], "pictureBrief": "", "needsReplacement": false } ],
+  "slides": [ { "heading": "", "description": "", "emphases": [""], "picturePrompt": "", "needsReplacement": false } ],
   "caption": "",
   "additionalHashtags": [""],
   "prCategory": "NONE | PR",
   "sourceUrls": [""]
 }
 $plan$
-    when 'REVISE' then $revise$あなたは大学生向けSNSメディアの Instagram 投稿を作る担当です。次の「現在の下書き」を、「修正指示」に沿って直し、指定した JSON だけを出力してください。説明文やコードブロックの記号は付けません。
+    when 'REVISE' then $revise$あなたは Instagram の投稿を作る担当です。次の「現在の下書き」を、「修正指示」に沿って直し、指定した JSON だけを出力してください。説明文やコードブロックの記号は付けません。
 
 # ネタ（箇条書きの情報。今日の日付: {{today}}）
 {{ideaText}}
@@ -899,22 +951,23 @@ $plan$
 # 書き方の指示
 - 直すのは文言だけ。中のスライドの枚数は必ず {{bodySlideCount}} 枚のままにし、並びも変えない。
 - ネタに無い事実を書かないこと。日時・場所・料金・URL・固有名詞は、ネタに書かれているものだけを使い、推測で補わない。
-- 表紙の target は次の候補から1つ選ぶ: {{coverTargets}}。keyword は1〜10文字。annotation は0〜16文字（無ければ空文字）。closingWords は1〜8文字。accent は次から選ぶ: {{accentColors}}。
+- 表紙の target は次の候補から一つ選ぶ: {{coverTargets}}。annotation は無ければ空文字にする。accent は次から選ぶ: {{accentColors}}。
+- 文字数・個数の上限は次のとおり。必ず守る: {{limits}}
 - 背景写真は修正では変えない。backgroundPhotoId は空文字にする。
-- 中のスライドは、heading（1〜16文字）と description（1〜120文字）で作る。description の中で目立たせたい語を、description に含まれる語そのままで0〜3か所、emphases に入れる。強調する語どうしは重ならないようにする。
-- 文字数は絵文字も1文字と数える。
-- pictureBrief は、そのスライドのカードに載せる素材画像を作るための短い説明を日本語で書く。絵の指示に固有名詞・商標・実在の人物を入れない。一般的な物や場面の言葉に言い換える。
+- 中のスライドは、heading と description で作る。description の中で目立たせたい語を、description に含まれる語そのままで emphases に入れる。強調する語どうしは重ならないようにする。
+- 文字数は絵文字も一文字と数える。
+- picturePrompt は、そのスライドのカードに載せる素材画像を作るための短い説明を日本語で書く。絵の指示に固有名詞・商標・実在の人物を入れない。一般的な物や場面の言葉に言い換える。
 - 実在のロゴ・料金表・アプリの画面・実在の施設の写真など、実物が要るスライドには、needsReplacement を true にして差し替えが必要の印を付ける。それ以外は false にする。
-- caption は2〜3段落で、読みやすく簡潔に書く。絵文字を使ってよい。ハッシュタグ・区切り線・運営の紹介は自動で付くので書かない。
-- additionalHashtags は、話題に合うハッシュタグを # 付きで0〜5個。固定のハッシュタグは自動で付くので入れない。
+- caption は数段落で、読みやすく簡潔に書く。絵文字を使ってよい。ハッシュタグ・区切り線・運営の紹介は自動で付くので書かない。
+- additionalHashtags は、話題に合うハッシュタグを # 付きで書く。固定のハッシュタグは自動で付くので入れない。
 - prCategory は、現在の下書きから変えない。
 - sourceUrls は、現在の下書きから変えない。ネタに無い URL を作らない。
 
 # 出力 JSON の形
 {
-  "cover": { "target": "", "keyword": "", "annotation": "", "closingWords": "", "accent": "PURPLE | RED | TEAL" },
+  "cover": { "target": "", "keyword": "", "annotation": "", "closingWords": "", "accent": "" },
   "backgroundPhotoId": "",
-  "slides": [ { "heading": "", "description": "", "emphases": [""], "pictureBrief": "", "needsReplacement": false } ],
+  "slides": [ { "heading": "", "description": "", "emphases": [""], "picturePrompt": "", "needsReplacement": false } ],
   "caption": "",
   "additionalHashtags": [""],
   "prCategory": "NONE | PR",
@@ -947,7 +1000,8 @@ revoke execute on function
   app.json_text(jsonb, text), app.json_text_or(jsonb, text, text), app.json_int(jsonb, text),
   app.json_bool_or(jsonb, text, boolean), app.json_uuid_or_null(jsonb, text),
   app.require_adoptable_candidate(uuid, jsonb), app.save_template_slides(uuid, uuid, uuid, jsonb),
-  app.past_post_cover(uuid), app.initial_prompt_body(text), app.seed_initial_prompts(uuid) from public;
+  app.past_post_cover(uuid), app.initial_prompt_body(text), app.seed_initial_prompts(uuid),
+  app.require_prompt_placeholders(text, text) from public;
 grant execute on function
   app.can_read_generation(uuid), app.can_read_prompt_version(uuid), app.can_read_style_settings(bigint),
   app.can_read_background_photo(uuid), app.can_read_slide(uuid), app.can_read_approval_event(bigint) to authenticated;
@@ -981,7 +1035,7 @@ begin
   end if;
   create policy uploads_private_insert_admin on storage.objects for insert to authenticated
     with check (bucket_id = 'uploads-private'
-                and (storage.foldername(name))[2] in ('backgrounds', 'style')
+                and (name ~ '^[^/]+/backgrounds/[A-Za-z0-9_-]+\.jpg$' or name ~ '^[^/]+/style/[A-Za-z0-9_-]+\.(png|jpg)$')
                 and exists (select 1 from app.current_member() cm
                              where cm.tenant_id::text = (storage.foldername(name))[1] and cm.role = 'ADMIN'));
 end $$;

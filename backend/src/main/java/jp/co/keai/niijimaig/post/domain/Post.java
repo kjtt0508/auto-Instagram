@@ -51,6 +51,7 @@ public final class Post {
 	public List<String> violationsForPublishing(PostMediaList prepared, ImageSpec spec, String prLabel) {
 		PostRevision revision = content.revision();
 		List<String> violations = new ArrayList<>(revision.violationsOfSourceImages(content.format(), spec));
+		violations.addAll(revision.violations());
 		if (prepared.count() != revision.expectedPublishMediaCount()) {
 			violations.add("公開用画像の枚数が承認された版と一致しません");
 		}
@@ -110,6 +111,21 @@ public final class Post {
 
 	public PostFormat format() {
 		return content.format();
+	}
+
+	/** 承認された版（画像化がスライドや設定を取り出すのに使う） */
+	public PostRevision revision() {
+		return content.revision();
+	}
+
+	/**
+	 * 公開用画像の準備に失敗した（画像化の失敗）: 予約中から失敗にする出来事。予約中でなければ（下書きに戻された・公開処理中など）作らない
+	 */
+	public Optional<PostEvent> failedPreparing(FailureReason reason) {
+		if (status.awaitsPublishing() && !status.isInterruptedPublishing()) {
+			return Optional.of(failed(reason));
+		}
+		return Optional.empty();
 	}
 
 	/** 公開用画像の準備のしかた（複製か画像化か） */

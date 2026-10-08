@@ -26,6 +26,8 @@
     { "id": "BR-001-05", "name": "全角空白（U+3000）を含む", "text": "#学割　京都", "valid": false },
     { "id": "BR-001-05", "name": "NBSP（U+00A0）を含む", "text": "#学割 京都", "valid": false },
     { "id": "BR-001-05", "name": "改行を含む", "text": "#学割\n京都", "valid": false },
+    { "id": "BR-001-05", "name": "NEL（U+0085）を含む（TS と Java で空白の範囲をそろえた）", "text": "#学割\u0085京都", "valid": false },
+    { "id": "BR-001-05", "name": "BOM（U+FEFF）を含む（空白として扱う）", "text": "#学割﻿京都", "valid": false },
     { "id": "BR-001-05", "name": "# で始まらない", "text": "学割", "valid": false },
     { "id": "BR-001-05", "name": "# だけ", "text": "#", "valid": false }
   ],

@@ -3,7 +3,7 @@
  * 出力 JSON の形（REQ-002 設計 4章・BR-002-03）:
  *   { cover: { target, keyword, annotation?, closingWords, accent },   // accent は PURPLE | RED | TEAL
  *     backgroundPhotoId?,                                               // 背景写真の候補から選んだ写真ID
- *     slides: [{ heading, description, emphases: string[], pictureBrief, needsReplacement }],
+ *     slides: [{ heading, description, emphases: string[], picturePrompt, needsReplacement }],
  *     caption, additionalHashtags: string[], prCategory,               // NONE | PR
  *     sourceUrls: string[] }
  */
@@ -18,7 +18,7 @@ export function readDraftJson(raw: unknown) {
       heading: text(slide.heading, at("heading"), errors),
       description: text(slide.description, at("description"), errors),
       emphases: slide.emphases === undefined ? [] : texts(slide.emphases, at("emphases"), errors),
-      pictureBrief: text(slide.pictureBrief, at("pictureBrief"), errors),
+      picturePrompt: text(slide.picturePrompt, at("picturePrompt"), errors),
       needsReplacement: slide.needsReplacement === true,
     };
   });

@@ -21,6 +21,7 @@ import jp.co.keai.niijimaig.post.domain.PostFormat;
 import jp.co.keai.niijimaig.post.domain.PostMedia;
 import jp.co.keai.niijimaig.post.domain.PostMediaList;
 import jp.co.keai.niijimaig.post.domain.PostRepository;
+import jp.co.keai.niijimaig.post.domain.PostRevision;
 import jp.co.keai.niijimaig.post.domain.PostStatus;
 import jp.co.keai.niijimaig.post.domain.PrCategory;
 import jp.co.keai.niijimaig.post.domain.PublishResult;
@@ -32,18 +33,31 @@ public class JdbcPostRepository implements PostRepository {
 
 	private static final String FIND_FOR_PUBLISHING = """
 			select pc.post_id, pc.tenant_id, pc.status, pc.scheduled_at,
-			       r.id as revision_id, r.format, r.caption, r.pr_category
+			       r.id as revision_id, r.format, r.media_source, r.caption, r.pr_category
 			  from post_current pc
 			  join post_revisions r on r.id = pc.approved_revision_id
 			 where pc.post_id = ? and pc.scheduled_at is not null
 			""";
 
+	/** 公開用に準備済みの画像。写真の投稿は publish_media、テンプレートの投稿は最新の承認の出来事の template_publish_media */
+	private static final String PREPARED_MEDIA = """
+			select position, storage_path, width, height, byte_size from publish_media where revision_id = ?
+			union all
+			select t.position, t.storage_path, t.width, t.height, t.byte_size from template_publish_media t
+			 where t.revision_id = ? and t.approval_event_id = (
+			       select max(e.id) from post_events e join post_revisions r on r.post_id = e.post_id
+			        where r.id = ? and e.event_type = 'APPROVED')
+			order by position
+			""";
+
 	private final JdbcTemplate jdbc;
 	private final TransactionTemplate tx;
+	private final JdbcTemplateRevisions templateRevisions;
 
-	public JdbcPostRepository(JdbcTemplate jdbc, TransactionTemplate tx) {
+	public JdbcPostRepository(JdbcTemplate jdbc, TransactionTemplate tx, JdbcTemplateRevisions templateRevisions) {
 		this.jdbc = jdbc;
 		this.tx = tx;
+		this.templateRevisions = templateRevisions;
 	}
 
 	@Override
@@ -53,17 +67,31 @@ public class JdbcPostRepository implements PostRepository {
 
 	private Post toPost(ResultSet rs) throws SQLException {
 		UUID revisionId = rs.getObject("revision_id", UUID.class);
-		Post.ApprovedContent content = new Post.ApprovedContent(revisionId,
-				PostFormat.valueOf(rs.getString("format")), new Caption(rs.getString("caption")),
-				PrCategory.valueOf(rs.getString("pr_category")), approvedMedia(revisionId));
-		return new Post(new Post.Identity(rs.getObject("post_id", UUID.class), rs.getObject("tenant_id", UUID.class)),
+		UUID tenantId = rs.getObject("tenant_id", UUID.class);
+		Post.ApprovedContent content = new Post.ApprovedContent(revisionId, PostFormat.valueOf(rs.getString("format")),
+				revisionOf(rs, revisionId, tenantId));
+		return new Post(new Post.Identity(rs.getObject("post_id", UUID.class), tenantId),
 				PostStatus.valueOf(rs.getString("status")), content,
 				ScheduledAt.restore(rs.getTimestamp("scheduled_at").toInstant()));
 	}
 
+	/** 写真の投稿（UPLOAD）は投稿画像一覧、テンプレートの投稿（TEMPLATE）はスライドなど。どちらの版かは記録（media_source）で決まる */
+	private PostRevision revisionOf(ResultSet rs, UUID revisionId, UUID tenantId) throws SQLException {
+		Caption caption = new Caption(rs.getString("caption"));
+		PrCategory prCategory = PrCategory.valueOf(rs.getString("pr_category"));
+		if ("TEMPLATE".equals(rs.getString("media_source"))) {
+			return templateRevisions.read(revisionId, tenantId, caption, prCategory);
+		}
+		return PostRevision.ofPhotos(caption, prCategory, approvedMedia(revisionId));
+	}
+
 	@Override
 	public PostMediaList preparedMedia(UUID revisionId) {
-		return media("publish_media", revisionId);
+		List<PostMedia> media = jdbc.query(PREPARED_MEDIA,
+				(rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
+						rs.getInt("height"), rs.getLong("byte_size")),
+				revisionId, revisionId, revisionId);
+		return new PostMediaList(media);
 	}
 
 	/** 承認された版の投稿画像。生成画像の由来つきで読む（post_media_origin。REQ-005 設計 5章） */
@@ -84,15 +112,6 @@ public class JdbcPostRepository implements PostRepository {
 		}
 		return Optional.of(new GeneratedImage(generationId, rs.getInt("candidate_position"),
 				ImageStyle.valueOf(rs.getString("style"))));
-	}
-
-	private PostMediaList media(String table, UUID revisionId) {
-		List<PostMedia> media = jdbc.query("select position, storage_path, width, height, byte_size from " + table
-				+ " where revision_id = ? order by position",
-				(rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
-						rs.getInt("height"), rs.getLong("byte_size")),
-				revisionId);
-		return new PostMediaList(media);
 	}
 
 	@Override

@@ -17,6 +17,7 @@
 	<properties>
 		<java.version>17</java.version>
 		<archunit.version>1.4.1</archunit.version>
+		<playwright.version>1.63.0</playwright.version>
 	</properties>
 
 	<dependencies>
@@ -35,6 +36,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-jackson</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.microsoft.playwright</groupId>
+			<artifactId>playwright</artifactId>
+			<version>${playwright.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
@@ -82,6 +88,20 @@
 
 	<build>
 		<finalName>batch</finalName>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+			<!-- 画像化するテンプレート（リポジトリの templates/<版>/）をクラスパスの templates/ に同梱する（ADR-0010） -->
+			<resource>
+				<directory>${project.basedir}/../templates</directory>
+				<targetPath>templates</targetPath>
+				<excludes>
+					<exclude>**/*.md</exclude>
+					<exclude>**/*.py</exclude>
+				</excludes>
+			</resource>
+		</resources>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

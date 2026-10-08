@@ -42,7 +42,7 @@ export class DraftProposal {
     if (violations.length > 0) return { proposal: undefined, violations };
     const slides = value.slides.map((s) => ({
       text: SlideText.restore({ heading: s.heading, description: s.description, emphases: s.emphases }),
-      brief: PictureBrief.of({ prompt: s.pictureBrief, replacementNeeded: s.needsReplacement }),
+      brief: PictureBrief.of({ prompt: s.picturePrompt, replacementNeeded: s.needsReplacement }),
     }));
     return {
       proposal: new DraftProposal(CoverText.restore(value.cover), value.backgroundPhotoId, slides, Caption.restore(value.caption),
@@ -87,7 +87,7 @@ export class DraftProposal {
   private static slideViolations(slide: ReturnType<typeof readDraftJson>["value"]["slides"][number]): string[] {
     return [
       ...SlideText.violationsOf(slide),
-      ...PictureBrief.violationsOf(slide.pictureBrief).map((v) => `絵の指示: ${v}`),
+      ...PictureBrief.violationsOf(slide.picturePrompt).map((v) => `絵の指示: ${v}`),
     ];
   }
 

@@ -1,0 +1,57 @@
+/* niijima@1: 1080x1350（4:5）。版は変更しない（変えるときは新しい版のフォルダを作る） */
+@font-face { font-family: "Noto Sans JP"; font-weight: 700; font-style: normal; src: url("fonts/NotoSansJP-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Noto Sans JP"; font-weight: 900; font-style: normal; src: url("fonts/NotoSansJP-Black.woff2") format("woff2"); }
+@font-face { font-family: "Noto Color Emoji"; font-style: normal; src: url("fonts/NotoColorEmoji.woff2") format("woff2");
+  unicode-range: U+00A9, U+00AE, U+200D, U+203C, U+2049, U+20E3, U+2122, U+2139, U+2194-21AA, U+231A-23FF, U+24C2, U+25AA-25FE, U+2600-27BF, U+2934-2935, U+2B05-2B55, U+3030, U+303D, U+3297, U+3299, U+FE0F, U+1F000-1FAFF, U+E0020-E007F; }
+
+:root { --navy: #101034; --yellow: #FCDE5D; --red: #FD3432; --accent-start: #8C52FE; --accent-end: #8C52FE; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--navy); }
+body { font-family: "Noto Sans JP", "Noto Color Emoji", sans-serif; font-weight: 700; color: #fff; }
+#canvas { position: relative; width: 1080px; height: 1350px; overflow: hidden; background: var(--navy); }
+.slide { position: absolute; inset: 0; }
+.band { position: absolute; left: 0; width: 1080px; background: var(--navy); z-index: 5; }
+.band-top { top: 0; height: 90px; }
+.band-bottom { bottom: 0; height: 48px; }
+.band-text { position: absolute; left: 70px; top: 17px; width: 940px; height: 58px; line-height: 58px; text-align: center; white-space: nowrap; overflow: hidden; font-weight: 700; }
+
+/* 1行の文字。行の高さ＝枠の高さにして、文字の大きさが変わっても縦の中央に置く */
+.line { position: absolute; left: 60px; width: 960px; text-align: center; white-space: nowrap; overflow: hidden; }
+
+/* 表紙: 上端の帯(5%)・細い青の線・暗くした写真(5%〜87%)の中の白い枠・下端の帯(13%) */
+#canvas[data-role="COVER"] .band-top { height: 68px; }
+#canvas[data-role="COVER"] .band-bottom { height: 175px; }
+#canvas[data-role="COVER"] .band-text { top: 6px; height: 56px; line-height: 56px; }
+.cover-line { position: absolute; left: 0; top: 68px; width: 1080px; height: 2px; background: #3a5bd9; }
+.cover-photo { position: absolute; left: 0; top: 70px; width: 1080px; height: 1105px; overflow: hidden; background: var(--navy); }
+.cover-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cover-shade { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); }
+.cover-frame { position: absolute; left: 32px; top: 102px; width: 1016px; height: 1041px; border: 2px solid #fff; }
+.target { top: 280px; height: 285px; line-height: 285px; font-weight: 900; }
+.annotation { top: 515px; height: 70px; line-height: 66px; font-weight: 700; }
+.annotation.split { display: flex; justify-content: space-between; border-bottom: 2px solid rgba(255, 255, 255, 0.85); }
+.annotation span { flex: none; }
+.keyword { top: 585px; height: 255px; line-height: 255px; font-weight: 900; color: var(--yellow); }
+.closing-row { top: 800px; height: 250px; font-weight: 900; }
+.closing-words { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; padding: 0 0.3em; line-height: 1.25; border-radius: 6px; text-shadow: 0 4px 8px rgba(0, 0, 0, 0.45); background: linear-gradient(90deg, var(--accent-start), var(--accent-end)); }
+
+/* 中のスライド */
+.backdrop { position: absolute; inset: -80px; width: calc(100% + 160px); height: calc(100% + 160px); object-fit: cover; filter: blur(40px); }
+.backdrop-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(16, 16, 52, 0.78), rgba(16, 16, 52, 0.62)); }
+.heading { position: absolute; left: 70px; top: 115px; width: 940px; height: 200px; text-align: center; overflow: hidden; line-height: 1.5; font-weight: 900; overflow-wrap: anywhere; }
+.card { position: absolute; left: 60px; top: 340px; width: 960px; height: 930px; padding: 32px; border-radius: 36px; background: #fff; color: #1a1a2e; }
+.photo { width: 780px; height: 585px; margin: 0 auto 28px; border-radius: 20px; overflow: hidden; background: #e8e8f0; }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.description { width: 888px; height: 253px; overflow: hidden; line-height: 1.5; overflow-wrap: anywhere; }
+.card.no-photo .photo { display: none; }
+.card.no-photo .description { height: 866px; }
+.em { color: var(--red); font-weight: 900; }
+
+/* 最後のスライド */
+.closing-message { position: absolute; left: 70px; top: 130px; width: 940px; height: 330px; overflow: hidden; text-align: center; white-space: pre-line; line-height: 1.5; font-weight: 900; overflow-wrap: anywhere; }
+.covers { position: absolute; left: 70px; top: 490px; width: 940px; height: 480px; display: flex; justify-content: center; gap: 40px; }
+.covers img { height: 480px; width: 384px; object-fit: cover; border-radius: 20px; display: block; }
+.account { position: absolute; left: 70px; top: 1020px; width: 940px; height: 200px; display: flex; align-items: center; gap: 36px; }
+.logo { flex: 0 0 150px; width: 150px; height: 150px; border-radius: 50%; object-fit: cover; }
+.intro { flex: 1 1 auto; height: 200px; overflow: hidden; white-space: pre-line; line-height: 1.5; overflow-wrap: anywhere; }

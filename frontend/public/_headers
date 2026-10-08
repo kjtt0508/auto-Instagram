@@ -1,0 +1,4 @@
+# Cloudflare Pages の追加ヘッダー（ADR-0010）。
+# プレビューの iframe（sandbox・allow-same-origin なし = opaque origin）がフォントを読めるよう、テンプレートに CORS を許す
+/templates/*
+  Access-Control-Allow-Origin: *

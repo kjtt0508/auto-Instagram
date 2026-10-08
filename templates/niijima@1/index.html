@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data: blob:">
+<title>niijima@1</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="canvas" data-role="">
+  <header class="band band-top"><div id="band-text" class="band-text" data-fit data-fit-max="28" data-fit-min="14"></div></header>
+
+  <section id="cover" class="slide" hidden>
+    <div class="cover-line"></div>
+    <div class="cover-photo">
+      <img id="cover-bg" class="cover-bg" alt="" hidden>
+      <div id="cover-shade" class="cover-shade" hidden></div>
+    </div>
+    <div class="cover-frame"></div>
+    <div id="cover-target" class="line target" data-fit data-fit-max="190" data-fit-min="40"></div>
+    <div id="cover-keyword" class="line keyword" data-fit data-fit-max="170" data-fit-min="36"></div>
+    <div id="cover-annotation" class="line annotation" data-fit data-fit-max="44" data-fit-min="16"></div>
+    <div id="cover-closing" class="line closing-row" data-fit data-fit-max="150" data-fit-min="30"><span id="cover-closing-text" class="closing-words"></span></div>
+  </section>
+
+  <section id="body" class="slide" hidden>
+    <img id="body-backdrop" class="backdrop" alt="" hidden>
+    <div class="backdrop-shade"></div>
+    <h1 id="body-heading" class="heading" data-fit data-fit-max="88" data-fit-min="28"></h1>
+    <div id="body-card" class="card">
+      <div id="body-photo" class="photo"><img id="body-material" alt=""></div>
+      <p id="body-description" class="description" data-fit data-fit-max="46" data-fit-min="20"></p>
+    </div>
+  </section>
+
+  <section id="closing" class="slide" hidden>
+    <div id="closing-message" class="closing-message" data-fit data-fit-max="64" data-fit-min="20"></div>
+    <div id="closing-covers" class="covers"></div>
+    <div class="account">
+      <img id="closing-logo" class="logo" alt="" hidden>
+      <div id="closing-intro" class="intro" data-fit data-fit-max="38" data-fit-min="16"></div>
+    </div>
+  </section>
+
+  <footer class="band band-bottom"></footer>
+</main>
+<script src="render.js"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ const context = (sourceUrlRequired = false) => ({ settings: sampleSettings(), pr
 
 const slideJson = (n: number, overrides: Record<string, unknown> = {}) => ({
   heading: `見出し${n}`, description: `説明文${n}です。学割が使えます。`, emphases: ["学割"],
-  pictureBrief: "明るい雰囲気のカフェの背景", needsReplacement: false, ...overrides,
+  picturePrompt: "明るい雰囲気のカフェの背景", needsReplacement: false, ...overrides,
 });
 
 const draftJson = (overrides: Record<string, unknown> = {}) => ({
@@ -41,12 +41,12 @@ describe("下書き案を出力 JSON から作る", () => {
     expect(slides.map((s) => s.role)).toEqual([SlideRole.COVER, SlideRole.BODY, SlideRole.BODY, SlideRole.BODY, SlideRole.CLOSING]);
   });
 
-  it("AC-002-11 キーワード10文字・締めの言葉8文字は受け付ける", () => {
-    expect(violationsOf(withCover({ keyword: "あ".repeat(10), closingWords: "い".repeat(8) }))).toEqual([]);
+  it("AC-002-11 キーワード12文字・締めの言葉8文字は受け付ける", () => {
+    expect(violationsOf(withCover({ keyword: "あ".repeat(12), closingWords: "い".repeat(8) }))).toEqual([]);
   });
 
-  it("AC-002-11 キーワード11文字・締めの言葉9文字・対象「同志社」・色「緑」は違反（下書き案にならない）", () => {
-    expect(violationsOf(withCover({ keyword: "あ".repeat(11) }))).toEqual(["キーワードは1〜10文字にしてください（11文字）"]);
+  it("AC-002-11 キーワード13文字・締めの言葉9文字・対象「同志社」・色「緑」は違反（下書き案にならない）", () => {
+    expect(violationsOf(withCover({ keyword: "あ".repeat(13) }))).toEqual(["キーワードは1〜12文字にしてください（13文字）"]);
     expect(violationsOf(withCover({ closingWords: "い".repeat(9) }))).toEqual(["締めの言葉は1〜8文字にしてください（9文字）"]);
     expect(violationsOf(withCover({ target: "同志社" }))).toEqual(["対象は「同志社大学」「同志社大生」のどれかにしてください"]);
     expect(violationsOf(withCover({ accent: "緑" }))).toEqual(["帯の色は紫・赤・青緑のどれかにしてください"]);
@@ -116,14 +116,14 @@ describe("下書き案を出力 JSON から作る", () => {
   });
 
   it("AC-002-21 差し替えが必要の印は絵の指示と一緒に保たれる", () => {
-    const json = draftJson({ slides: [slideJson(1, { pictureBrief: "音楽アプリの料金表のイメージ", needsReplacement: true })] });
+    const json = draftJson({ slides: [slideJson(1, { picturePrompt: "音楽アプリの料金表のイメージ", needsReplacement: true })] });
     const brief = DraftProposal.parse(json, context()).proposal!.bodies()[0].brief;
     expect(brief.needsReplacement()).toBe(true);
     expect(brief.promptText()).not.toContain("Spotify");
   });
 
   it("AC-002-20 個人情報を含む絵の指示は違反", () => {
-    const json = draftJson({ slides: [slideJson(1, { pictureBrief: "連絡先 taro@example.com の画像" })] });
+    const json = draftJson({ slides: [slideJson(1, { picturePrompt: "連絡先 taro@example.com の画像" })] });
     expect(violationsOf(json)).toEqual(["中のスライド1枚目: 絵の指示: 個人を特定できる情報は指示に含められません"]);
   });
 });
