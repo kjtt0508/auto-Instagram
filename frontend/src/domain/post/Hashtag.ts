@@ -1,7 +1,8 @@
 /** ハッシュタグ: 「#」（全角「＃」も）で始まり空白を含まない分類語 */
 export class Hashtag {
   // 空白の範囲は TS と Java で同じ: \s に、TS の \s に無い U+0085（NEL）と、Java の \s に無い U+FEFF（BOM）を明示して足す
-  private static readonly IN_TEXT = /[#＃][^\s\u0085﻿#＃]+/gu;
+  // （BOM は生の文字ではなく、u フラグ付きのコードポイント形式のエスケープで書く）
+  private static readonly IN_TEXT = /[#＃][^\s\u0085\u{FEFF}#＃]+/gu;
 
   private constructor(readonly text: string) {}
 

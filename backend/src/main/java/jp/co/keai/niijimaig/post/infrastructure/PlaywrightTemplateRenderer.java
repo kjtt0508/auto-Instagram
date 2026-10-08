@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.post.infrastructure;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,7 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 	static final String ORIGIN = "https://template.local";
 	static final int WIDTH = 1080;
 	static final int HEIGHT = 1350;
+	static final String SKIP_DOWNLOAD = "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD";
 	private static final double TIMEOUT_MS = 30_000;
 	private static final Logger LOG = LoggerFactory.getLogger(PlaywrightTemplateRenderer.class);
 
@@ -39,7 +41,12 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 	private Browser browser;
 
 	@Override
-	public synchronized byte[] render(String templateVersion, Map<String, Object> data) {
+	public byte[] render(String templateVersion, Map<String, Object> data) {
+		return render(templateVersion, data, page -> { });
+	}
+
+	/** 描き終えたページ（撮影の直前）を inspector に見せる。テストが DOM と通信の遮断を確かめるために使う */
+	synchronized byte[] render(String templateVersion, Map<String, Object> data, Consumer<Page> inspector) {
 		Browser started = browser();
 		try (BrowserContext context = started.newContext(new Browser.NewContextOptions()
 				.setViewportSize(WIDTH, HEIGHT).setDeviceScaleFactor(1).setServiceWorkers(ServiceWorkerPolicy.BLOCK))) {
@@ -48,8 +55,15 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 			page.setDefaultTimeout(TIMEOUT_MS);
 			page.navigate(ORIGIN + "/" + templateVersion + "/index.html");
 			page.evaluate("data => window.render(data)", data);
+			inspector.accept(page);
 			return page.screenshot(new Page.ScreenshotOptions().setType(ScreenshotType.JPEG).setQuality(90));
 		} catch (PlaywrightException e) {
+			if (!started.isConnected()) {
+				// ブラウザが落ちた・切断された: 内容のせいではないので、一時的な失敗（ジョブの再試行）として扱う
+				LOG.warn("画像化のブラウザが切断されました: {}", e.getClass().getSimpleName());
+				close();
+				throw new RenderBrowserUnavailableException(e);
+			}
 			LOG.warn("画像化の描画に失敗: {}", e.getClass().getSimpleName());
 			throw new RenderFailedException("テンプレートの描画に失敗しました", e);
 		}
@@ -79,7 +93,8 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 		}
 		close();
 		try {
-			playwright = Playwright.create();
+			// ブラウザの自動ダウンロードはしない（実行のたびに3種類を落とさない）。使うのは chromium だけで、無ければ起動に失敗する
+			playwright = Playwright.create(new Playwright.CreateOptions().setEnv(Map.of(SKIP_DOWNLOAD, "1")));
 			browser = playwright.chromium().launch();
 			return browser;
 		} catch (RuntimeException e) {

@@ -1,0 +1,2 @@
+# テンプレートのバイト列（版のハッシュ）が、Windows と CI で変わらないようにする（ADR-0010、TemplateVersionFilesTest）
+templates/** -text

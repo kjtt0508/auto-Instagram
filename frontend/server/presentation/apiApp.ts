@@ -1,6 +1,9 @@
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { ConnectingForbiddenError, type ConnectingOutcome, type InstagramConnecting } from "../connection/application/instagramConnecting";
+import type { DraftGenerating } from "../draft/application/draftGenerating";
+import { DraftRefusal } from "../draft/application/draftPorts";
+import type { ManualRelay } from "../draft/application/manualRelay";
 import type { CandidateClearing } from "../image/application/candidateClearing";
 import type { ImageGenerating } from "../image/application/imageGenerating";
 import { ImageGenerationRefusal } from "../image/application/imageGenerationPorts";
@@ -17,12 +20,29 @@ const REFUSAL_STATUS: Record<ImageGenerationRefusal["code"], ContentfulStatusCod
   TRANSLATION_UNAVAILABLE: 503, GENERATION_FAILED: 502, GENERATION_TIMEOUT: 504,
 };
 
-const errorBody = (code: string, message: string, details: string[] = []) => ({ error: { code, message, details } });
+// 下書き案の生成（REQ-002 設計 4章）。手動コピペの取り込みの INVALID_OUTPUT は 400、生成での INVALID_OUTPUT は 502
+const DRAFT_REFUSAL: Record<DraftRefusal["code"], { status: ContentfulStatusCode; code: string }> = {
+  INVALID_IDEA: { status: 400, code: "INVALID_IDEA" }, INVALID_REQUEST: { status: 400, code: "INVALID_REQUEST" },
+  FORBIDDEN: { status: 403, code: "FORBIDDEN" }, NOT_FOUND: { status: 404, code: "NOT_FOUND" },
+  STYLE_NOT_CONFIGURED: { status: 409, code: "STYLE_NOT_CONFIGURED" }, LLM_LIMIT_REACHED: { status: 409, code: "LLM_LIMIT_REACHED" },
+  INVALID_OUTPUT: { status: 502, code: "INVALID_OUTPUT" }, INVALID_MANUAL_OUTPUT: { status: 400, code: "INVALID_OUTPUT" },
+  LLM_UNAVAILABLE: { status: 503, code: "LLM_UNAVAILABLE" }, LLM_TIMEOUT: { status: 504, code: "LLM_TIMEOUT" },
+};
+
+const errorBody = (code: string, message: string, details: string[] = [], ideaId?: string) =>
+  ({ error: { code, message, details, ...(ideaId ? { ideaId } : {}) } });
+
+const objectOf = async (c: Context): Promise<Record<string, unknown>> => {
+  const body: unknown = await c.req.json().catch(() => ({}));
+  return typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+};
 
 export function createApiApp<Env extends object>(assembly: {
   connecting: (env: Env) => Promise<InstagramConnecting>;
   imageGenerating: (env: Env) => Promise<ImageGenerating>;
   candidateClearing: (env: Env) => Promise<CandidateClearing>;
+  draftGenerating: (env: Env) => Promise<DraftGenerating>;
+  manualRelay: (env: Env) => Promise<ManualRelay>;
 }) {
   const app = new Hono<{ Bindings: Env }>().basePath("/api");
   const bearerOf = (c: Context) => c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
@@ -60,7 +80,29 @@ export function createApiApp<Env extends object>(assembly: {
     return c.body(null, 204);
   });
 
+  app.post("/drafts", async (c) => {
+    const body = await objectOf(c);
+    const result = await (await assembly.draftGenerating(c.env)).generate(bearerOf(c), { ideaText: typeof body.ideaText === "string" ? body.ideaText : "" });
+    return c.json(result, 201);
+  });
+
+  // 固定の語（manual-prompt・manual）は、:generationId より先に登録する
+  app.post("/drafts/manual-prompt", async (c) => c.json(await (await assembly.manualRelay(c.env)).prompt(bearerOf(c), await objectOf(c)), 201));
+
+  app.post("/drafts/manual", async (c) => c.json(await (await assembly.manualRelay(c.env)).import(bearerOf(c), await objectOf(c)), 201));
+
+  app.post("/drafts/:generationId/revise", async (c) => {
+    const body = await objectOf(c);
+    const result = await (await assembly.draftGenerating(c.env)).revise(bearerOf(c), c.req.param("generationId"),
+      { instruction: typeof body.instruction === "string" ? body.instruction : "", current: body.current });
+    return c.json(result, 201);
+  });
+
   app.onError((e, c) => {
+    if (e instanceof DraftRefusal) {
+      const mapped = DRAFT_REFUSAL[e.code];
+      return c.json(errorBody(mapped.code, e.message, e.details, e.ideaId), mapped.status);
+    }
     if (e instanceof ImageGenerationRefusal) return c.json(errorBody(e.code, e.message, e.details), REFUSAL_STATUS[e.code]);
     logFailure(c.req.path, e);
     return c.json(errorBody("INTERNAL", "処理に失敗しました。時間を置いてお試しください"), 500);

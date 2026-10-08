@@ -12,8 +12,10 @@ import jp.co.keai.niijimaig.post.domain.PostMedia;
  */
 public interface RenderRecords {
 
-	/** 投稿の最新の承認の出来事 */
-	long latestApprovalEvent(UUID postId);
+	/**
+	 * 投稿の最新の承認の出来事。承認された版（approvedRevisionId）を承認した出来事でなければ（読んだあとに再承認された）例外にする
+	 */
+	long approvalEvent(UUID postId, UUID approvedRevisionId);
 
 	/** 承認の出来事で選んだ過去の投稿の表紙（0〜2件。順番どおり） */
 	List<PastPostCover> pastPosts(long approvalEventId);
@@ -21,7 +23,7 @@ public interface RenderRecords {
 	/** 画像化した JPEG（記録済みなら） */
 	Optional<PostMedia> rendered(long approvalEventId, int position);
 
-	void recordRender(long approvalEventId, PostMedia rendered);
+	void recordRender(UUID revisionId, long approvalEventId, PostMedia rendered);
 
 	/** TEMPLATE の版の公開用 JPEG（記録済みなら） */
 	Optional<PostMedia> publishMedia(UUID revisionId, long approvalEventId, int position);

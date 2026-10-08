@@ -858,15 +858,15 @@ end $$;
 
 -- 画像化した JPEG の記録（承認の出来事ごと。保存先は {団体}/renders/{承認の出来事}/{順番}.jpg に限る）
 create function public.record_template_render(
-  p_approval_event bigint, p_position int, p_storage_path text, p_width int, p_height int, p_byte_size int) returns void
+  p_revision uuid, p_approval_event bigint, p_position int, p_storage_path text, p_width int, p_height int, p_byte_size int) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare t uuid;
 begin
-  -- その投稿の最新の承認の出来事で、承認した版が TEMPLATE のものだけ（古い承認・UPLOAD の版には記録しない）
+  -- その投稿の最新の承認の出来事で、承認した版（p_revision）が TEMPLATE のものだけ（古い承認・別の版・UPLOAD の版には記録しない）
   select p.tenant_id into t from post_events e
     join posts p on p.id = e.post_id
     join post_revisions r on r.id = e.revision_id and r.media_source = 'TEMPLATE'
-   where e.id = p_approval_event and e.event_type = 'APPROVED'
+   where e.id = p_approval_event and e.event_type = 'APPROVED' and e.revision_id = p_revision
      and e.id = (select max(l.id) from post_events l where l.post_id = e.post_id and l.event_type = 'APPROVED');
   if t is null then
     raise exception '承認の出来事が見つかりません（最新の承認の出来事で、テンプレートの版のものだけ記録できます）' using errcode = 'P0404';
@@ -1018,12 +1018,12 @@ grant execute on function
 revoke execute on function
   public.record_idea(uuid, uuid, uuid, text),
   public.record_generation(uuid, uuid, uuid, text, text, uuid, uuid, jsonb, text, jsonb, jsonb, uuid, text),
-  public.record_template_render(bigint, int, text, int, int, int),
+  public.record_template_render(uuid, bigint, int, text, int, int, int),
   public.record_template_publish_media(uuid, bigint, int, text, int, int, int) from public, anon, authenticated;
 grant execute on function
   public.record_idea(uuid, uuid, uuid, text),
   public.record_generation(uuid, uuid, uuid, text, text, uuid, uuid, jsonb, text, jsonb, jsonb, uuid, text),
-  public.record_template_render(bigint, int, text, int, int, int),
+  public.record_template_render(uuid, bigint, int, text, int, int, int),
   public.record_template_publish_media(uuid, bigint, int, text, int, int, int) to service_role;
 
 -- ───────── Storage: 背景写真（backgrounds/）とロゴ（style/）は管理者だけが書ける。renders/ は service role だけ ─────────

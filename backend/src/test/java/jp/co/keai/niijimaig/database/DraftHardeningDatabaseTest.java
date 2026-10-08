@@ -57,7 +57,7 @@ class DraftHardeningDatabaseTest extends DraftDatabaseSupport {
 				"select public.record_idea(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'x')",
 				"select public.record_generation(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'PLAN', 'API', gen_random_uuid(), gen_random_uuid(),"
 						+ " '{}'::jsonb, 'TIMEOUT', '[]'::jsonb, null, null, null)",
-				"select public.record_template_render(1, 1, 'x', 1, 1, 1)",
+				"select public.record_template_render(gen_random_uuid(), 1, 1, 'x', 1, 1, 1)",
 				"select public.record_template_publish_media(gen_random_uuid(), 1, 1, 'x', 1, 1, 1)");
 		for (String rpc : rpcs) {
 			assertRejected(() -> asAnon(j -> j.queryForList(rpc)), "42501", "permission denied");

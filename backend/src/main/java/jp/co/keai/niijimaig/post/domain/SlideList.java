@@ -59,6 +59,11 @@ public final class SlideList {
 		return slides.stream().flatMap(s -> s.imageRefs().stream()).toList();
 	}
 
+	/** スライドを上から順に */
+	public List<Slide> inOrder() {
+		return slides;
+	}
+
 	/** 写真風の生成画像を含むか（各スライドに委ねる） */
 	boolean requiresAiDisclosure() {
 		return slides.stream().anyMatch(Slide::requiresAiDisclosure);

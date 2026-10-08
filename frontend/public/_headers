@@ -2,3 +2,4 @@
 # プレビューの iframe（sandbox・allow-same-origin なし = opaque origin）がフォントを読めるよう、テンプレートに CORS を許す
 /templates/*
   Access-Control-Allow-Origin: *
+  Content-Security-Policy: sandbox allow-scripts

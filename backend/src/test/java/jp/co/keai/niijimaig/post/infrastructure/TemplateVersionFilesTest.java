@@ -44,6 +44,12 @@ class TemplateVersionFilesTest {
 		assertThat(files.read("niijima@1", "../niijima@1/index.html")).isEmpty();
 		assertThat(files.read("niijima@1", "/index.html")).isEmpty();
 		assertThat(files.read("../templates", "niijima@1/index.html")).isEmpty();
+		assertThat(files.read("..", "niijima@1/index.html")).isEmpty();
+		assertThat(files.read(".", "index.html")).isEmpty();
+		assertThat(files.read("niijima@1", "./index.html")).isEmpty();
+		assertThat(files.read("niijima@1", "fonts/../index.html")).isEmpty();
+		assertThat(files.read("niijima@1", "fonts/./README.txt")).isEmpty();
+		assertThat(files.read("niijima@1", "..")).isEmpty();
 		assertThat(files.read("niijima@1", "no-such.js")).isEmpty();
 		assertThat(files.read("niijima@1", "index.html")).isPresent();
 	}

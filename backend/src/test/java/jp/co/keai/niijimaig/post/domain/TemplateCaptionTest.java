@@ -87,12 +87,56 @@ class TemplateCaptionTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-02 版の画像の参照は背景写真・素材画像（と設定のロゴ）。過去の投稿の表紙は含まない。アップロードの投稿には無い")
-	void imageRefs() {
-		assertThat(revision(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.ILLUSTRATION)))).imageRefs())
-				.containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg");
+	@DisplayName("AC-002-02 画像化の計画は、スライドごとに必要な画像だけを持つ（表紙は背景写真、中は素材画像、最後は過去の投稿の表紙）。アップロードの投稿には無い")
+	void renderPlanHasImagesPerSlide() {
+		PastPostCover past = PastPostCover.restore(java.util.UUID.randomUUID(), "t/posts/p2/1.jpg");
+		RevisionContent.RenderPlan plan = revision(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.ILLUSTRATION))))
+				.renderPlan(List.of(past)).orElseThrow();
+
+		assertThat(plan.templateVersion()).isEqualTo(SlideSamples.TEMPLATE_VERSION);
+		assertThat(plan.settings()).containsEntry("bandText", "テスト帯");
+		assertThat(plan.slides()).extracting(RevisionContent.RenderPlan.SlideRender::imageRefs).containsExactly(
+				List.of("t/backgrounds/1.jpg"), List.of("t/materials/1.jpg"), List.of("t/posts/p2/1.jpg"));
+		assertThat(plan.slides().get(1).values()).containsEntry("template", "body");
 		PostRevision photos = PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, new PostMediaList(List.of()));
-		assertThat(photos.imageRefs()).isEmpty();
+		assertThat(photos.renderPlan(List.of())).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-002-02 ロゴは最後のスライドだけが使うので、最後のスライドの画像の参照にだけ入る")
+	void logoBelongsToClosingSlide() {
+		PostStyleSettings base = SlideSamples.settings();
+		PostStyleSettings withLogo = new PostStyleSettings(java.util.UUID.randomUUID(), 1, "帯", List.of("同志社大学"), "ありがとう", "@a",
+				base.captionFooter(), base.fixedHashtags(), Optional.of("t/style/logo.png"));
+		PostRevision revision = PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE,
+				SlideSamples.slides(List.of(SlideSamples.body(Optional.empty()))), SlideSamples.TEMPLATE_VERSION, withLogo, List.of());
+
+		RevisionContent.RenderPlan plan = revision.renderPlan(List.of()).orElseThrow();
+
+		assertThat(plan.slides()).extracting(RevisionContent.RenderPlan.SlideRender::imageRefs).containsExactly(
+				List.of("t/backgrounds/1.jpg"), List.of(), List.of("t/style/logo.png"));
+		assertThat(plan.settings()).containsEntry("logo", "t/style/logo.png");
+	}
+
+	@Test
+	@DisplayName("AC-002-02 準備が済んでいるかは、準備済みの枚数が承認された版の枚数に届いているかで決まる（足りなければ途中）")
+	void isPreparedWith() {
+		PostRevision template = revision(SlideSamples.body(Optional.empty()));
+		Post post = new Post(new Post.Identity(java.util.UUID.randomUUID(), java.util.UUID.randomUUID()), PostStatus.SCHEDULED,
+				new Post.ApprovedContent(java.util.UUID.randomUUID(), PostFormat.CAROUSEL, template),
+				ScheduledAt.restore(java.time.Instant.parse("2026-11-03T01:00:00Z")));
+
+		assertThat(post.isPreparedWith(new PostMediaList(List.of()))).isFalse();
+		assertThat(post.isPreparedWith(CaptionTest.oneMedia())).isFalse();
+		assertThat(post.isPreparedWith(media(3))).isTrue();
+	}
+
+	private static PostMediaList media(int count) {
+		List<PostMedia> list = new ArrayList<>();
+		for (int i = 1; i <= count; i++) {
+			list.add(new PostMedia(i, "t/public/" + i + ".jpg", 1080, 1350, 1000));
+		}
+		return new PostMediaList(list);
 	}
 
 	@Test

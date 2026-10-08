@@ -173,17 +173,20 @@ class ApprovalPastPostsDatabaseTest extends DraftDatabaseSupport {
 		UUID revision = latestRevision(post);
 		long event = approve(post);
 
-		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, 1, ?, 1080, 1350, 1)", event,
+		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 1)", revision, event,
 				tenant + "/renders/" + event + "/2.jpg")), "22023", "保存先が正しくありません");
-		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, 1, ?, 1080, 1350, 1)", event,
+		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 1)", revision, event,
 				tenant + "/posts/a.jpg")), "22023", "保存先が正しくありません");
-		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, 1, ?, 1080, 1350, 1)", -1L,
+		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 1)", revision, -1L,
 				renderPath(-1L, 1))), "P0404", "承認の出来事");
+		// 承認の出来事が承認した版でない版には記録できない
+		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 1)", UUID.randomUUID(),
+				event, renderPath(event, 1))), "P0404", "承認の出来事");
 		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_publish_media(?, ?, 1, ?, 1080, 1350, 1)",
 				UUID.randomUUID(), event, tenant + "/" + UUID.randomUUID() + ".jpg")), "P0404", "承認の出来事");
 		assertRejected(() -> db.asServiceRole(j -> j.queryForList("select public.record_template_publish_media(?, ?, 1, ?, 1080, 1350, 1)",
 				revision, event, tenant + "/renders/x.jpg")), "22023", "保存先が正しくありません");
-		assertRejected(() -> db.as(editor, j -> j.queryForList("select public.record_template_render(?, 1, ?, 1080, 1350, 1)", event, renderPath(event, 1))),
+		assertRejected(() -> db.as(editor, j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 1)", revision, event, renderPath(event, 1))),
 				"42501", "permission denied");
 		assertRejected(() -> db.as(admin, j -> j.queryForList("select public.record_template_publish_media(?, ?, 1, ?, 1080, 1350, 1)",
 				revision, event, tenant + "/" + UUID.randomUUID() + ".jpg")), "42501", "permission denied");

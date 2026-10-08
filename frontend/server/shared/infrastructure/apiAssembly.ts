@@ -2,6 +2,10 @@ import { InstagramConnecting } from "../../connection/application/instagramConne
 import { InstagramOAuthClient } from "../../connection/infrastructure/instagramOAuthClient";
 import { SupabaseAdmin } from "../../connection/infrastructure/supabaseAdmin";
 import { TokenCipher } from "../../connection/infrastructure/tokenCipher";
+import { DraftGenerating } from "../../draft/application/draftGenerating";
+import { ManualRelay } from "../../draft/application/manualRelay";
+import { GeminiDraftClient } from "../../draft/infrastructure/geminiDraftClient";
+import { SupabaseDraftRecords } from "../../draft/infrastructure/supabaseDraftRecords";
 import { CandidateClearing } from "../../image/application/candidateClearing";
 import { ImageGenerating } from "../../image/application/imageGenerating";
 import { GeminiTranslator } from "../../image/infrastructure/geminiTranslator";
@@ -37,6 +41,11 @@ export function apiAssembly(http: typeof fetch = workersFetch, newId: () => stri
       newId, now: () => Date.now(),
     }),
     candidateClearing: async (env: ApiEnv) => new CandidateClearing(new SupabaseImageRecords(supabaseOf(env))),
+    draftGenerating: async (env: ApiEnv) => new DraftGenerating({
+      records: new SupabaseDraftRecords(supabaseOf(env)), model: new GeminiDraftClient(env.GEMINI_API_KEY, http),
+      newId, now: () => Date.now(),
+    }),
+    manualRelay: async (env: ApiEnv) => new ManualRelay({ records: new SupabaseDraftRecords(supabaseOf(env)), newId, now: () => Date.now() }),
   };
 }
 

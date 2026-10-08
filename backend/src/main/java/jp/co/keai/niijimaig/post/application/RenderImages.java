@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** 画像化に要る画像（背景写真・素材画像・ロゴ・過去の投稿の表紙）を Storage から読み、テンプレートに渡す data URL にする */
+/** 画像化に要る画像（背景写真・素材画像・ロゴ・過去の投稿の表紙）を Storage から読み、テンプレートに渡す data URL にする。呼び出し側がスライドごとに必要な参照だけを渡す */
 final class RenderImages {
 
 	private final RenderStorage storage;
@@ -28,7 +28,9 @@ final class RenderImages {
 
 	private String dataUrl(String ref) {
 		OwnedStoragePath.require(tenantId, ref);
-		byte[] bytes = storage.read(tenantId, ref).orElseThrow(() -> new RenderFailedException("画像化に必要な画像が見つかりません"));
+		// Storage の 5xx・接続失敗は一時的な失敗（ジョブの再試行）。画像が無いのは内容による失敗
+		byte[] bytes = TemplateRendering.guarded("STORAGE_UNAVAILABLE", () -> storage.read(tenantId, ref))
+				.orElseThrow(() -> new RenderFailedException("画像化に必要な画像が見つかりません"));
 		String type = ref.endsWith(".png") ? "image/png" : "image/jpeg";
 		return "data:" + type + ";base64," + Base64.getEncoder().encodeToString(bytes);
 	}

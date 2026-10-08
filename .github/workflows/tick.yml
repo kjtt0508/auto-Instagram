@@ -27,17 +27,26 @@ jobs:
         run: ./mvnw -B -q -DskipTests package
         working-directory: backend
       # テンプレートの画像化（Playwright の chromium）。ブラウザは版ごとにキャッシュし、無いときだけ入れる（REQ-002 設計 6章）
+      # 外部の都合（ブラウザの配布元・apt）で失敗しても、写真の投稿の公開は止めない。
+      # 画像化できないときだけ、アプリ側が一時的な失敗として扱う（MediaPreparation）。
+      # Maven のキャッシュ（~/.m2）には依存せず、pom と同じ版の Playwright を npx で入れる。
+      # 入れ終わったときだけキャッシュに保存する（失敗した中途半端な状態を残さない）。
+      - id: playwright_version
+        run: echo "version=$(sed -n 's:.*<playwright.version>\(.*\)</playwright.version>.*:\1:p' backend/pom.xml)" >> "$GITHUB_OUTPUT"
       - id: playwright
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('backend/pom.xml') }}
-      - if: steps.playwright.outputs.cache-hit != 'true'
-        run: ./mvnw -B -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps chromium"
-        working-directory: backend
-      - if: steps.playwright.outputs.cache-hit == 'true'
-        run: ./mvnw -B -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install-deps chromium"
-        working-directory: backend
+          key: playwright-chromium-${{ steps.playwright_version.outputs.version }}
+      - id: playwright_install
+        if: steps.playwright.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: npx -y playwright@${{ steps.playwright_version.outputs.version }} install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit != 'true' && steps.playwright_install.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ steps.playwright_version.outputs.version }}
       - run: java -jar target/batch.jar --job=tick --run-id=${{ github.run_id }}
         working-directory: backend
         env:

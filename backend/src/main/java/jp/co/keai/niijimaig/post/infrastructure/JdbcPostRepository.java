@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -39,15 +40,17 @@ public class JdbcPostRepository implements PostRepository {
 			 where pc.post_id = ? and pc.scheduled_at is not null
 			""";
 
-	/** 公開用に準備済みの画像。写真の投稿は publish_media、テンプレートの投稿は最新の承認の出来事の template_publish_media */
-	private static final String PREPARED_MEDIA = """
-			select position, storage_path, width, height, byte_size from publish_media where revision_id = ?
-			union all
+	/** 写真の投稿の公開用画像。publish_media だけを読む（テンプレートの表が無くても、写真の投稿は影響を受けない） */
+	private static final String PREPARED_PHOTO_MEDIA = """
+			select position, storage_path, width, height, byte_size from publish_media where revision_id = ? order by position
+			""";
+
+	/** テンプレートの投稿の公開用画像: その版を承認した最新の出来事の template_publish_media */
+	private static final String PREPARED_TEMPLATE_MEDIA = """
 			select t.position, t.storage_path, t.width, t.height, t.byte_size from template_publish_media t
 			 where t.revision_id = ? and t.approval_event_id = (
-			       select max(e.id) from post_events e join post_revisions r on r.post_id = e.post_id
-			        where r.id = ? and e.event_type = 'APPROVED')
-			order by position
+			       select max(e.id) from post_events e where e.revision_id = ? and e.event_type = 'APPROVED')
+			 order by t.position
 			""";
 
 	private final JdbcTemplate jdbc;
@@ -87,11 +90,16 @@ public class JdbcPostRepository implements PostRepository {
 
 	@Override
 	public PostMediaList preparedMedia(UUID revisionId) {
-		List<PostMedia> media = jdbc.query(PREPARED_MEDIA,
-				(rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
-						rs.getInt("height"), rs.getLong("byte_size")),
-				revisionId, revisionId, revisionId);
+		RowMapper<PostMedia> mapper = (rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
+				rs.getInt("height"), rs.getLong("byte_size"));
+		List<PostMedia> media = isTemplate(revisionId) ? jdbc.query(PREPARED_TEMPLATE_MEDIA, mapper, revisionId, revisionId)
+				: jdbc.query(PREPARED_PHOTO_MEDIA, mapper, revisionId);
 		return new PostMediaList(media);
+	}
+
+	private boolean isTemplate(UUID revisionId) {
+		return jdbc.queryForList("select media_source from post_revisions where id = ?", String.class, revisionId).stream()
+				.anyMatch("TEMPLATE"::equals);
 	}
 
 	/** 承認された版の投稿画像。生成画像の由来つきで読む（post_media_origin。REQ-005 設計 5章） */

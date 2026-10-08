@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import jp.co.keai.niijimaig.TestcontainersConfiguration;
 import jp.co.keai.niijimaig.connection.domain.AccessToken;
 import jp.co.keai.niijimaig.connection.infrastructure.TokenCipher;
+import jp.co.keai.niijimaig.job.domain.JobType;
+import jp.co.keai.niijimaig.post.application.PostPublishing;
+import jp.co.keai.niijimaig.post.domain.PostMedia;
+import jp.co.keai.niijimaig.post.domain.PostRepository;
+import jp.co.keai.niijimaig.support.ChromiumInstaller;
 import jp.co.keai.niijimaig.support.FakeExternalsConfiguration;
 import jp.co.keai.niijimaig.support.FakeExternalsConfiguration.FakeRenderStorage;
 import jp.co.keai.niijimaig.support.FakeInstagram;
@@ -44,6 +50,15 @@ import jp.co.keai.niijimaig.support.SupabaseFixture.LoggedIn;
 @ActiveProfiles("test")
 class TemplateRenderingScenarioTest {
 
+	/** 画像化のコードはブラウザを自動ダウンロードしないので、使う chromium だけを入れておく */
+	@BeforeAll
+	static void installChromium() {
+		ChromiumInstaller.ensureInstalled();
+	}
+
+	@Autowired JobRepository jobRepository;
+	@Autowired PostPublishing publishing;
+	@Autowired PostRepository postRepository;
 	@Autowired TickScenario tick;
 	@Autowired FakeInstagram instagram;
 	@Autowired FakeRenderStorage storage;
@@ -174,6 +189,51 @@ class TemplateRenderingScenarioTest {
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, second)).isEqualTo(3);
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, first)).isEqualTo(3);
 		assertThat(storage.objects.get(tenant + "/renders/" + second + "/3.jpg")).isNotEqualTo(firstClosing);
+	}
+
+	@Test
+	@DisplayName("AC-002-02 公開用画像が途中までしか準備できていない（4枚中1枚）と、公開は拒否（MEDIA_REJECTED）ではなく準備を待つ")
+	void partialPreparationWaitsInsteadOfRejecting() {
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null)), body("文字だけ", null)));
+		long approval = latestApproval(post);
+		UUID revision = jdbc.queryForObject("select revision_id from post_events where id = ?", UUID.class, approval);
+		db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, 1, ?, 1080, 1350, 200000)", revision, approval,
+				tenant + "/renders/" + approval + "/1.jpg"));
+		db.asServiceRole(j -> j.queryForList("select public.record_template_publish_media(?, ?, 1, ?, 1080, 1350, 200000)", revision, approval,
+				tenant + "/" + UUID.randomUUID() + ".jpg"));
+		jobRepository.enqueueForNewSchedules();
+		ClaimedJob claimed = jobRepository.claim(JobType.PUBLISH_POST, "partial").orElseThrow();
+
+		publishing.run(claimed);
+
+		assertThat(status(post)).isEqualTo("SCHEDULED");
+		assertThat(jdbc.queryForObject("select count(*) from post_failures f join post_events e on e.id = f.event_id where e.post_id = ?",
+				Integer.class, post)).isZero();
+		assertThat(jdbc.queryForObject("select status from jobs where post_id = ? and job_type = 'PUBLISH_POST'", String.class, post)).isEqualTo("PENDING");
+		assertThat(instagram.publishCalls.get()).isZero();
+	}
+
+	@Test
+	@DisplayName("AC-002-02 写真の投稿の公開用画像は publish_media だけを読む。テンプレートの記録の表が無くても影響を受けない")
+	void photoPostPreparedMediaDoesNotTouchTemplateTables() {
+		String path = tenant + "/posts/" + UUID.randomUUID() + ".jpg";
+		String revisionJson = "{\"format\":\"FEED_IMAGE\",\"mediaSource\":\"UPLOAD\",\"caption\":\"写真\",\"prCategory\":\"NONE\",\"media\":[{\"position\":1,"
+				+ "\"storagePath\":\"" + path + "\",\"width\":1080,\"height\":1350,\"byteSize\":500000}]}";
+		UUID post = approvedPost(Instant.now().plus(Duration.ofDays(1)), revisionJson);
+		UUID revision = jdbc.queryForObject("select id from post_revisions where post_id = ?", UUID.class, post);
+		postRepository.recordPreparedMedia(revision, new PostMedia(1, tenant + "/" + UUID.randomUUID() + ".jpg", 1080, 1350, 500000));
+
+		// テンプレートの記録の表を（このトランザクションの中だけ）無くしても読める
+		Integer count = tx.execute(status -> {
+			jdbc.execute("alter table template_publish_media rename to template_publish_media_hidden");
+			try {
+				return postRepository.preparedMedia(revision).count();
+			} finally {
+				status.setRollbackOnly();
+			}
+		});
+
+		assertThat(count).isEqualTo(1);
 	}
 
 	// ───────── 下ごしらえ ─────────

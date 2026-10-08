@@ -57,6 +57,24 @@ export class DraftProposal {
   }
 
   /**
+   * 出力 JSON と同じ形の値（API の応答・生成の記録。再び parse に渡せる）。
+   * 背景写真が無い（候補が 0枚・修正で変えない）ときは null
+   */
+  toJson() {
+    return {
+      cover: { target: this.cover.target, keyword: this.cover.keyword, annotation: this.cover.annotation,
+        closingWords: this.cover.closingWords, accent: this.cover.accent.code },
+      backgroundPhotoId: this.backgroundPhotoId ?? null,
+      slides: this.slides.map((s) => ({ heading: s.text.heading, description: s.text.description, emphases: [...s.text.emphases],
+        picturePrompt: s.brief.promptText(), needsReplacement: s.brief.needsReplacement() })),
+      caption: this.caption.text,
+      additionalHashtags: [...this.additionalHashtags],
+      prCategory: this.prCategory.code,
+      sourceUrls: [...this.sourceUrls],
+    };
+  }
+
+  /**
    * ネタの本文に無い日付・時刻・金額・URL（スライドの文言とキャプション本文から探す）。自動では消さず、人が直すか承知する（BR-002-10）。
    * location は出力 JSON の場所（cover.keyword / slides[1].description / caption など）
    */

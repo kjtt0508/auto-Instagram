@@ -2,6 +2,11 @@ package jp.co.keai.niijimaig.post.infrastructure;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.util.HexFormat;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -38,17 +43,39 @@ public class SupabaseMediaStorage implements MediaStorage, RenderStorage {
 	@Override
 	public String copyToPublic(UUID tenantId, String privatePath) {
 		String publicPath = tenantId + "/" + UUID.randomUUID() + ".jpg";
+		send(copyRequest(privatePath, publicPath), false);
+		return publicPath;
+	}
+
+	/** 名前は HMAC(service role キー, 団体/鍵) の16進。キーを知らない人には推測できず、同じ鍵なら同じ名前になる */
+	@Override
+	public String copyToPublic(UUID tenantId, String privatePath, String idempotencyKey) {
+		OwnedStoragePath.require(tenantId, privatePath);
+		String publicPath = tenantId + "/" + hmacName(tenantId + "/" + idempotencyKey) + ".jpg";
+		send(copyRequest(privatePath, publicPath), true);
+		return publicPath;
+	}
+
+	private HttpRequest copyRequest(String privatePath, String publicPath) {
 		String body = """
 				{"bucketId":"%s","sourceKey":"%s","destinationBucket":"%s","destinationKey":"%s"}
 				""".formatted(PRIVATE_BUCKET, privatePath, PUBLIC_BUCKET, publicPath);
-		HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/storage/v1/object/copy"))
+		return HttpRequest.newBuilder(URI.create(baseUrl + "/storage/v1/object/copy"))
 				.header("Authorization", "Bearer " + serviceRoleKey)
 				.header("apikey", serviceRoleKey)
 				.header("Content-Type", "application/json")
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.build();
-		send(request);
-		return publicPath;
+	}
+
+	private String hmacName(String message) {
+		try {
+			Mac mac = Mac.getInstance("HmacSHA256");
+			mac.init(new SecretKeySpec(serviceRoleKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+			return HexFormat.of().formatHex(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+		} catch (GeneralSecurityException e) {
+			throw new IllegalStateException("公開用の名前を作れません", e);
+		}
 	}
 
 	@Override
@@ -83,7 +110,11 @@ public class SupabaseMediaStorage implements MediaStorage, RenderStorage {
 		HttpRequest request = authorized("/storage/v1/object/" + PRIVATE_BUCKET + "/" + privatePath)
 				.header("Content-Type", "image/jpeg").header("x-upsert", "true")
 				.POST(HttpRequest.BodyPublishers.ofByteArray(jpeg)).build();
-		send(request);
+		send(request, false);
+	}
+
+	private static boolean isDuplicate(HttpResponse<String> response) {
+		return response.statusCode() == 409 || (response.statusCode() == 400 && response.body() != null && response.body().contains("Duplicate"));
 	}
 
 	private HttpRequest.Builder authorized(String path) {
@@ -91,10 +122,11 @@ public class SupabaseMediaStorage implements MediaStorage, RenderStorage {
 				.header("Authorization", "Bearer " + serviceRoleKey).header("apikey", serviceRoleKey);
 	}
 
-	private void send(HttpRequest request) {
+	/** duplicateIsOk: 複製先が既にあること（HTTP 409。本文に Duplicate を含む 400 も）を成功として扱う */
+	private void send(HttpRequest request, boolean duplicateIsOk) {
 		try {
-			HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-			if (response.statusCode() >= 300) {
+			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+			if (response.statusCode() >= 300 && !(duplicateIsOk && isDuplicate(response))) {
 				throw new IllegalStateException("Storage への複製に失敗: HTTP " + response.statusCode());
 			}
 		} catch (IOException e) {

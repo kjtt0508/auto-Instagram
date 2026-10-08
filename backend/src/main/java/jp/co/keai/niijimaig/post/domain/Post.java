@@ -47,6 +47,11 @@ public final class Post {
 		return new PublishingStep.Start(PostEvent.of(Kind.PUBLISH_STARTED, status, PostStatus.PUBLISHING));
 	}
 
+	/** 公開用画像の準備が済んでいるか（承認された版の枚数ぶん揃っているか）。足りなければ、準備の途中として待つ（公開は拒否しない） */
+	public boolean isPreparedWith(PostMediaList prepared) {
+		return prepared.count() >= content.revision().expectedPublishMediaCount();
+	}
+
 	/** 公開してよい内容か。公開用キャプション（PR表記・AI生成の表示込み）と画像を検査し、理由を列挙する */
 	public List<String> violationsForPublishing(PostMediaList prepared, ImageSpec spec, String prLabel) {
 		PostRevision revision = content.revision();

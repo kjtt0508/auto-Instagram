@@ -96,7 +96,7 @@ public class PostPublishing {
 				return;
 			}
 			PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId());
-			if (prepared.count() == 0) {
+			if (!post.isPreparedWith(prepared)) {
 				waitForMedia();
 				return;
 			}

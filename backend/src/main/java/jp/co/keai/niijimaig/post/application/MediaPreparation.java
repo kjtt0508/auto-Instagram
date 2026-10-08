@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.post.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -20,7 +21,8 @@ import jp.co.keai.niijimaig.post.domain.RevisionContent.Preparation;
 /**
  * ユースケース「公開用画像を準備する」（REQ-001.md 6.2、REQ-002 設計 6章）。
  * 準備のしかた（複製か画像化か）は投稿の版が決める（preparation()）。ここは取得・実行・失敗の記録の調整だけを行う。
- * 画像化の失敗は、その場で投稿を失敗（画像化の失敗）にする。ブラウザを起動できないときは、ジョブを次の定期処理で再試行する（最大3回）。
+ * 画像化の内容による失敗は、その場で投稿を失敗（画像化の失敗）にする。一時的な失敗（ブラウザを起動できない・Storage や記録の失敗）は、
+ * ジョブを次の定期処理で再試行する（最大3回。3回目も失敗したら画像化の失敗）。複製の準備の失敗の扱いは従来どおり。
  */
 @Service
 public class MediaPreparation {
@@ -35,7 +37,15 @@ public class MediaPreparation {
 
 	MediaPreparation(PostRepository posts, MediaCopying copying, TemplateRendering rendering, JobRepository jobs, Clock clock) {
 		this.posts = posts;
-		this.methods = Map.of(Preparation.COPY, copying, Preparation.RENDER, rendering);
+		EnumMap<Preparation, PreparationMethod> byPreparation = new EnumMap<>(Preparation.class);
+		byPreparation.put(Preparation.COPY, copying);
+		byPreparation.put(Preparation.RENDER, rendering);
+		for (Preparation preparation : Preparation.values()) {
+			if (!byPreparation.containsKey(preparation)) {
+				throw new IllegalStateException("準備のしかたが足りません: " + preparation);
+			}
+		}
+		this.methods = byPreparation;
 		this.jobs = jobs;
 		this.clock = clock;
 	}
@@ -52,8 +62,8 @@ public class MediaPreparation {
 			succeed(claimed);
 		} catch (RenderFailedException e) {
 			failNow(claimed, post, e.getMessage());
-		} catch (RenderBrowserUnavailableException e) {
-			retryLater(claimed, post);
+		} catch (RenderTemporaryFailureException e) {
+			retryLater(claimed, post, e);
 		}
 	}
 
@@ -68,13 +78,13 @@ public class MediaPreparation {
 				clock.instant());
 	}
 
-	private void retryLater(ClaimedJob claimed, Post post) {
+	/** 一時的な失敗: ジョブを次の定期処理で再試行する。3回目も失敗したら画像化の失敗にする */
+	private void retryLater(ClaimedJob claimed, Post post, RenderTemporaryFailureException e) {
 		Job next = claimed.job().failedOrRetry();
 		if (next.isFinallyFailed()) {
-			failNow(claimed, post, "画像化のブラウザを起動できませんでした");
+			failNow(claimed, post, "画像化の準備を完了できませんでした（" + e.code() + "）");
 			return;
 		}
-		jobs.finish(claimed, next, AttemptOutcome.error("BROWSER_UNAVAILABLE", "画像化のブラウザを起動できません", 0),
-				clock.instant().plus(RETRY_AFTER));
+		jobs.finish(claimed, next, AttemptOutcome.error(e.code(), e.getMessage(), 0), clock.instant().plus(RETRY_AFTER));
 	}
 }

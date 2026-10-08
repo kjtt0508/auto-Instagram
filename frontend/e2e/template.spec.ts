@@ -1,6 +1,6 @@
 import { chromium, expect, test, webkit, type BrowserType, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, sep } from "node:path";
 
 // テンプレート niijima@1（ADR-0010）を、画像化と同じ方法（架空の origin に配り、他の通信を遮断）で chromium と webkit で描く。
 // AC-002-01（HTML が文字として出る）/ NFR-002-05（上限文字数で枠からはみ出さない）/ NFR-002-04（chromium と webkit で一致）
@@ -22,7 +22,7 @@ async function openPage(type: BrowserType) {
     const prefix = `/${VERSION}/`;
     if (url.origin !== "https://template.local" || !url.pathname.startsWith(prefix)) return route.abort();
     const file = normalize(join(ROOT, decodeURIComponent(url.pathname.slice(prefix.length))));
-    if (!file.startsWith(ROOT)) return route.abort();
+    if (!file.startsWith(ROOT + sep)) return route.abort();
     return route.fulfill({ body: readFileSync(file), contentType: TYPES[extname(file)] ?? "application/octet-stream" });
   });
   const page = await context.newPage();
@@ -54,7 +54,7 @@ const closing = (over: object = {}) => ({ role: "CLOSING", pastPosts: ["past1", 
 
 /** 上限の文字数を、最も幅の広い文字・絵文字で埋めた各スライド */
 const WORST: Record<string, object> = {
-  // キーワードは要件の上限（10文字）より多い12文字まで、1行に収まるよう縮める
+  // キーワードの上限は12文字（REQ-002 BR-002-04）。12文字でも1行に収まるよう縮める
   "表紙 幅広の漢字": cover({ target: rep("鬱", 12), keyword: rep("鬱", 12), annotation: rep("鬱", 16), closingWords: rep("鬱", 8) }),
   "表紙 絵文字": cover({ target: rep("😀", 12), keyword: rep("😀", 12), annotation: rep("😀", 16), closingWords: rep("😀", 8), background: undefined }),
   "表紙 英大文字": cover({ keyword: rep("W", 12), annotation: rep("W", 16), closingWords: rep("W", 8) }),

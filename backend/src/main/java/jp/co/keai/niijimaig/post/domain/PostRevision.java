@@ -1,7 +1,6 @@
 package jp.co.keai.niijimaig.post.domain;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -85,28 +84,13 @@ public final class PostRevision {
 		return content.originalsNotYetIn(prepared);
 	}
 
-	/** 画像化に必要な画像の参照（背景写真・素材画像・ロゴの保存先）。過去の投稿の表紙は承認で決まるので含まない */
-	public List<String> imageRefs() {
-		return content.imageRefs();
-	}
-
 	/** 中身が満たさない条件（追加のハッシュタグの個数・形）。記録から戻すときは検査しないので、公開の前に確かめる */
 	public List<String> violations() {
 		return content.violations();
 	}
 
-	/** 画像化に使うテンプレートの版の名前（写真の投稿は無し） */
-	public Optional<String> templateVersion() {
-		return content.renderTemplateVersion();
-	}
-
-	/** 画像化でテンプレートに渡すスライドごとの値。最後のスライドには承認で選んだ過去の投稿の表紙を載せる */
-	public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
-		return content.slideRenderValues(pastPosts);
-	}
-
-	/** 画像化でテンプレートに渡す投稿の型の設定の値 */
-	public Map<String, Object> settingsRenderValues() {
-		return content.settingsRenderValues();
+	/** 画像化の計画（テンプレートの版・設定の値・スライドごとの値と必要な画像）。最後のスライドには承認で選んだ過去の投稿の表紙を載せる。写真の投稿は無し */
+	public Optional<RevisionContent.RenderPlan> renderPlan(List<PastPostCover> pastPosts) {
+		return content.renderPlan(pastPosts);
 	}
 }

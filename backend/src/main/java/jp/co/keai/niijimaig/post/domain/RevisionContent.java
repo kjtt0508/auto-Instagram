@@ -1,6 +1,8 @@
 package jp.co.keai.niijimaig.post.domain;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,9 +38,6 @@ public sealed interface RevisionContent {
 	/** 公開用キャプションに足すハッシュタグ（固定→追加、重複を除く。写真の投稿は無し） */
 	List<String> hashtags();
 
-	/** 画像化に必要な画像の参照（背景写真・素材画像・ロゴの保存先。写真の投稿は無し） */
-	List<String> imageRefs();
-
 	/** 元の画像が公開できない理由（写真の投稿は投稿画像の仕様。テンプレートの投稿は画像化した画像を検査するのでここでは無し） */
 	List<String> violationsOfSourceImages(PostFormat format, ImageSpec spec);
 
@@ -51,14 +50,38 @@ public sealed interface RevisionContent {
 	 */
 	List<String> violations();
 
-	/** 画像化に使うテンプレートの版の名前（写真の投稿は無し） */
-	Optional<String> renderTemplateVersion();
+	/**
+	 * 画像化の計画（テンプレートの版・投稿の型の設定の値・スライドごとの値と必要な画像）。最後のスライドには承認で選んだ過去の投稿を載せる。
+	 * 写真の投稿は画像化しないので無し
+	 */
+	Optional<RenderPlan> renderPlan(List<PastPostCover> pastPosts);
 
-	/** 画像化でテンプレートに渡すスライドごとの値（最後のスライドには承認で選んだ過去の投稿を載せる。写真の投稿は無し） */
-	List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts);
+	/**
+	 * 画像化の計画: テンプレートの投稿だけが返す。スライドごとに、テンプレートに渡す値と、そのスライドの描画に要る画像の参照（保存先）を持つ
+	 * （画像は必要なスライドにだけ渡す）。templateVersion は使うテンプレートの版の名前、settings は投稿の型の設定の値
+	 */
+	record RenderPlan(String templateVersion, Map<String, Object> settings, List<SlideRender> slides) {
 
-	/** 画像化でテンプレートに渡す投稿の型の設定の値（写真の投稿は無し） */
-	Map<String, Object> settingsRenderValues();
+		public RenderPlan {
+			if (templateVersion == null || settings == null || slides == null) {
+				throw new IllegalArgumentException("画像化の計画の値は必須");
+			}
+			settings = Collections.unmodifiableMap(new LinkedHashMap<>(settings));
+			slides = List.copyOf(slides);
+		}
+
+		/** 画像化する1枚: テンプレートに渡すスライドの値と、その描画に要る画像の参照 */
+		public record SlideRender(Map<String, Object> values, List<String> imageRefs) {
+
+			public SlideRender {
+				if (values == null || imageRefs == null) {
+					throw new IllegalArgumentException("スライドの値と画像の参照は必須");
+				}
+				values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
+				imageRefs = List.copyOf(imageRefs);
+			}
+		}
+	}
 
 	/** 写真をアップロードした投稿の中身 */
 	record PhotoPost(PostMediaList media) implements RevisionContent {
@@ -100,11 +123,6 @@ public sealed interface RevisionContent {
 		}
 
 		@Override
-		public List<String> imageRefs() {
-			return List.of();
-		}
-
-		@Override
 		public List<String> violationsOfSourceImages(PostFormat format, ImageSpec spec) {
 			return media.violationsFor(format, spec);
 		}
@@ -120,18 +138,8 @@ public sealed interface RevisionContent {
 		}
 
 		@Override
-		public Optional<String> renderTemplateVersion() {
+		public Optional<RenderPlan> renderPlan(List<PastPostCover> pastPosts) {
 			return Optional.empty();
-		}
-
-		@Override
-		public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
-			return List.of();
-		}
-
-		@Override
-		public Map<String, Object> settingsRenderValues() {
-			return Map.of();
 		}
 	}
 
@@ -192,13 +200,6 @@ public sealed interface RevisionContent {
 		}
 
 		@Override
-		public List<String> imageRefs() {
-			List<String> refs = new ArrayList<>(slides.imageRefs());
-			settings.logoStoragePath().ifPresent(refs::add);
-			return List.copyOf(refs);
-		}
-
-		@Override
 		public List<String> violationsOfSourceImages(PostFormat format, ImageSpec spec) {
 			return List.of();
 		}
@@ -213,19 +214,19 @@ public sealed interface RevisionContent {
 			return settings.fixedHashtags().violationsOfAdditional(additionalHashtags);
 		}
 
+		/** ロゴは最後のスライドだけが使うので、最後のスライドの画像の参照に足す */
 		@Override
-		public Optional<String> renderTemplateVersion() {
-			return Optional.of(templateVersion);
-		}
-
-		@Override
-		public List<Map<String, Object>> slideRenderValues(List<PastPostCover> pastPosts) {
-			return slides.withPastPosts(pastPosts).renderValues();
-		}
-
-		@Override
-		public Map<String, Object> settingsRenderValues() {
-			return settings.renderValues();
+		public Optional<RenderPlan> renderPlan(List<PastPostCover> pastPosts) {
+			List<Slide> inOrder = slides.withPastPosts(pastPosts).inOrder();
+			List<RenderPlan.SlideRender> renders = new ArrayList<>();
+			for (Slide slide : inOrder) {
+				List<String> refs = new ArrayList<>(slide.imageRefs());
+				if (slide.role() == SlideRole.CLOSING) {
+					settings.logoStoragePath().ifPresent(refs::add);
+				}
+				renders.add(new RenderPlan.SlideRender(slide.renderValues(), refs));
+			}
+			return Optional.of(new RenderPlan(templateVersion, settings.renderValues(), renders));
 		}
 	}
 }

@@ -37,6 +37,11 @@ public class FakeExternalsConfiguration {
 			}
 
 			@Override
+			public String copyToPublic(UUID tenantId, String privatePath, String idempotencyKey) {
+				return tenantId + "/" + UUID.nameUUIDFromBytes(idempotencyKey.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + ".jpg";
+			}
+
+			@Override
 			public String publicUrl(String publicPath) {
 				return "https://example.supabase.co/storage/v1/object/public/media-public/" + publicPath;
 			}

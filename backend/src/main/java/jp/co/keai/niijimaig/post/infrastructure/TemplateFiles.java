@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.post.infrastructure;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,10 +21,15 @@ final class TemplateFiles {
 
 	/** 版の中のファイル。版・パスの形が正しくない、または無ければ空 */
 	Optional<byte[]> read(String version, String path) {
-		if (!VERSION.matcher(version).matches() || !PATH.matcher(path).matches() || path.contains("..")) {
+		if (!VERSION.matcher(version).matches() || !PATH.matcher(path).matches() || hasDotSegment(version) || hasDotSegment(path)) {
 			return Optional.empty();
 		}
 		return cache.computeIfAbsent(version + "/" + path, key -> load("templates/" + key));
+	}
+
+	/** 「.」「..」だけの区切りがあるか（版や別の場所を指す抜け道。版もパスも許さない） */
+	private static boolean hasDotSegment(String value) {
+		return Arrays.stream(value.split("/", -1)).anyMatch(segment -> segment.equals(".") || segment.equals(".."));
 	}
 
 	private Optional<byte[]> load(String resource) {

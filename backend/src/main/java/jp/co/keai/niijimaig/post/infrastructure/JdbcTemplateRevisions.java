@@ -24,6 +24,7 @@ import jp.co.keai.niijimaig.post.domain.PostRevision;
 import jp.co.keai.niijimaig.post.domain.PostStyleSettings;
 import jp.co.keai.niijimaig.post.domain.PrCategory;
 import jp.co.keai.niijimaig.post.domain.Slide;
+import jp.co.keai.niijimaig.post.domain.SlideRole;
 import jp.co.keai.niijimaig.post.domain.SlideList;
 import jp.co.keai.niijimaig.post.domain.SlideText;
 
@@ -73,10 +74,11 @@ class JdbcTemplateRevisions {
 	}
 
 	private Slide slide(UUID slideId, String role) {
-		return switch (role) {
-			case "COVER" -> new Slide(cover(slideId));
-			case "BODY" -> new Slide(body(slideId));
-			default -> new Slide(ClosingContent.empty());
+		// 知らない役割は例外（valueOf）。黙って最後のスライドとして扱わない
+		return switch (SlideRole.valueOf(role)) {
+			case COVER -> new Slide(cover(slideId));
+			case BODY -> new Slide(body(slideId));
+			case CLOSING -> new Slide(ClosingContent.empty());
 		};
 	}
 

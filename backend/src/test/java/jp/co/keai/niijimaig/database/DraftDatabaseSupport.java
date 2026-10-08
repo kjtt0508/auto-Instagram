@@ -153,9 +153,19 @@ abstract class DraftDatabaseSupport {
 		return tenant + "/renders/" + event + "/" + position + ".jpg";
 	}
 
+	/** 承認の出来事が承認した版に、画像化した JPEG を記録する */
 	void recordRender(long event, int position) {
-		db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, ?, 1080, 1350, 200000)",
-				event, position, renderPath(event, position)));
+		recordRender(approvedRevision(event), event, position);
+	}
+
+	void recordRender(UUID revision, long event, int position) {
+		db.asServiceRole(j -> j.queryForList("select public.record_template_render(?, ?, ?, ?, 1080, 1350, 200000)",
+				revision, event, position, renderPath(event, position)));
+	}
+
+	/** 承認の出来事が承認した版 */
+	UUID approvedRevision(long event) {
+		return jdbc.queryForObject("select revision_id from post_events where id = ?", UUID.class, event);
 	}
 
 	List<Map<String, Object>> pastPosts(long approvalEvent) {

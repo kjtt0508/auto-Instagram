@@ -22,12 +22,14 @@ class JdbcRenderRecords implements RenderRecords {
 	}
 
 	@Override
-	public long latestApprovalEvent(UUID postId) {
-		Long id = jdbc.queryForObject("select max(id) from post_events where post_id = ? and event_type = 'APPROVED'", Long.class, postId);
-		if (id == null) {
-			throw new IllegalStateException("承認の出来事がありません");
-		}
-		return id;
+	public long approvalEvent(UUID postId, UUID approvedRevisionId) {
+		return jdbc.query("select id, revision_id from post_events where post_id = ? and event_type = 'APPROVED' order by id desc limit 1",
+				(rs, i) -> new ApprovalRow(rs.getLong("id"), rs.getObject("revision_id", UUID.class)), postId).stream().findFirst()
+				.filter(row -> approvedRevisionId.equals(row.revisionId())).map(ApprovalRow::id)
+				.orElseThrow(() -> new IllegalStateException("承認された版を承認した出来事がありません"));
+	}
+
+	private record ApprovalRow(long id, UUID revisionId) {
 	}
 
 	@Override
@@ -45,8 +47,8 @@ class JdbcRenderRecords implements RenderRecords {
 	}
 
 	@Override
-	public void recordRender(long approvalEventId, PostMedia rendered) {
-		jdbc.queryForList("select public.record_template_render(?, ?, ?, ?, ?, ?)", approvalEventId, rendered.position(),
+	public void recordRender(UUID revisionId, long approvalEventId, PostMedia rendered) {
+		jdbc.queryForList("select public.record_template_render(?, ?, ?, ?, ?, ?, ?)", revisionId, approvalEventId, rendered.position(),
 				rendered.storagePath(), rendered.width(), rendered.height(), (int) rendered.bytes());
 	}
 
