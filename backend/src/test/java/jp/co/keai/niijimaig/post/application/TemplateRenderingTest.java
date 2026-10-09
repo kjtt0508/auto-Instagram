@@ -322,6 +322,45 @@ class TemplateRenderingTest {
 	}
 
 	@Test
+	@DisplayName("AC-002-23 持ち時間切れでも1枚でも描けていれば試行回数に数えない。3回目でも失敗にせず、上限を増やして再試行に戻す")
+	void timeBudgetAfterProgressIsNotCountedAsAnAttempt() {
+		Instant deadline = NOW.plusSeconds(60);
+		renderer.script.add(() -> {
+			clock.set(deadline.plusSeconds(1));
+			return jpeg(1080, 1350);
+		});
+
+		preparation.run(claimed(3), deadline);
+
+		Job next = jobs.finished.get(0).next;
+		assertThat(next.status()).isEqualTo(JobStatus.PENDING);
+		assertThat(next.maxAttempts()).isEqualTo(4);
+		assertThat(jobs.finished.get(0).outcome.errorKind()).isEqualTo("TIME_BUDGET");
+		assertThat(posts.failures).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-002-23 持ち時間切れで1枚も描けなかった試行は数える。3回目なら画像化の失敗（RENDER_FAILED）にして、進まない状態を続けない")
+	void timeBudgetWithoutProgressIsCounted() {
+		preparation.run(claimed(3), NOW);
+
+		assertThat(renderer.calls).isEmpty();
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED));
+	}
+
+	@Test
+	@DisplayName("AC-002-23 記録済みの順番を飛ばしただけで描いていない試行は、進んだことにならない（数える）")
+	void skippingRecordedSlidesIsNotProgress() {
+		records.addRender(approval, 1);
+		records.addPublish(approval, 1);
+
+		preparation.run(claimed(3), NOW);
+
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
+	}
+
+	@Test
 	@DisplayName("AC-002-23 次の定期処理で、描けた分を作り直さずに続きから準備できる")
 	void resumesAfterTheBudgetRanOut() {
 		Instant deadline = NOW.plusSeconds(60);

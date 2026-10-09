@@ -19,10 +19,13 @@ public final class FixedHashtags {
 		this.hashtags = withoutDuplicates(texts.stream().map(Hashtag::new).toList());
 	}
 
-	/** 追加のハッシュタグと合わせた並び（固定が先、重複は先に出たほうを残す） */
+	/**
+	 * 追加のハッシュタグと合わせた並び（固定が先、重複は先に出たほうを残す）。
+	 * 形が正しくない追加分は並べない（TS と同じ。承認の前には violationsOfAdditional が理由を出す）
+	 */
 	public List<String> mergedWith(List<String> additional) {
 		List<Hashtag> all = new ArrayList<>(hashtags);
-		additional.forEach(text -> all.add(new Hashtag(text)));
+		additional.stream().filter(Hashtag::isHashtag).forEach(text -> all.add(new Hashtag(text)));
 		return withoutDuplicates(all).stream().map(Hashtag::toString).toList();
 	}
 

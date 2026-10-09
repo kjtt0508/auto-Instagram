@@ -121,11 +121,12 @@ class JdbcTemplateRevisions {
 
 	private Optional<MaterialImage> material(UUID slideId) {
 		return jdbc.query("""
-				select m.storage_path, m.width, m.height, a.generation_id, a.candidate_position, g.style
+				select m.storage_path, m.width, m.height, m.byte_size, a.generation_id, a.candidate_position, g.style
 				  from body_materials m left join material_adoptions a on a.slide_id = m.slide_id
 				  left join image_generations g on g.id = a.generation_id
 				 where m.slide_id = ?
-				""", (rs, i) -> new MaterialImage(rs.getString("storage_path"), rs.getInt("width"), rs.getInt("height"), generated(rs)),
+				""", (rs, i) -> new MaterialImage(rs.getString("storage_path"), rs.getInt("width"), rs.getInt("height"),
+				rs.getLong("byte_size"), generated(rs)),
 				slideId).stream().findFirst();
 	}
 

@@ -30,6 +30,31 @@ export class PromptPurpose {
     return found;
   }
 
+  /**
+   * プロンプトの本文に入れる差し込み値の名前（REQ-002 設計 4章の表。GenerationInput.placeholders() の名前と同じ）。
+   * 全部入れる必要があり、これ以外は入れられない。キャプション生成は REQ-003 で決める（まだ無い）
+   */
+  placeholderNames(): readonly string[] | undefined {
+    const common = ["today", "ideaText", "coverTargets", "accentColors", "limits"];
+    if (this === PromptPurpose.PLAN) return [...common, "backgroundPhotos"];
+    if (this === PromptPurpose.REVISE) return [...common, "currentDraft", "instruction", "bodySlideCount"];
+    return undefined;
+  }
+
+  /** 新しい版の本文が満たさない条件（空でない・必要な差し込み値がそろう・知らない差し込み値が無い）。DB の検査（22023）と同じ規則 */
+  violationsOfBody(body: string): string[] {
+    if (body.trim() === "") return ["プロンプトの本文を入力してください"];
+    const names = this.placeholderNames();
+    if (!names) return [];
+    const used = new Set([...body.matchAll(/\{\{([^{}]*)\}\}/gu)].map((m) => m[1]));
+    const missing = names.filter((n) => !used.has(n));
+    const unknown = [...used].filter((u) => !names.includes(u));
+    return [
+      ...(missing.length > 0 ? [`プロンプトの本文に必要な差し込み値がありません: ${missing.map((n) => `{{${n}}}`).join("、")}`] : []),
+      ...(unknown.length > 0 ? [`プロンプトの本文に知らない差し込み値があります: ${unknown.map((n) => `{{${n}}}`).join("、")}`] : []),
+    ];
+  }
+
   /** 背景写真の候補から AI に選ばせるのは、最初の生成（PLAN）だけ。修正では背景写真を変えない */
   choosesBackgroundPhoto(): boolean {
     return this === PromptPurpose.PLAN;

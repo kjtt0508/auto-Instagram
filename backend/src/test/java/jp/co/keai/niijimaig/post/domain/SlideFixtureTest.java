@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /** 表紙の文言・スライドの文言・スライド構成を、画面（TS）と同じ共通テストケースで確かめる（ADR-0005。文言も完全に同じ並びで比べる） */
 class SlideFixtureTest {
@@ -107,10 +108,46 @@ class SlideFixtureTest {
 		SlideList withPast = slides.withPastPosts(List.of(PastPostCover.restore(UUID.randomUUID(), "t/posts/p2/1.jpg")));
 		assertThat(withPast.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg", "t/posts/p2/1.jpg");
 		assertThat(withPast.renderValues()).hasSize(3);
-		assertThat(withPast.renderValues().get(0)).containsEntry("template", "cover").containsEntry("keyword", "期末試験")
+		assertThat(withPast.renderValues().get(0)).containsEntry("role", "COVER").containsEntry("keyword", "期末試験")
 				.containsEntry("accentStart", "#8C52FE").containsEntry("background", "t/backgrounds/1.jpg");
-		assertThat(withPast.renderValues().get(1)).containsEntry("template", "body").containsEntry("heading", "学割が使える");
-		assertThat(withPast.renderValues().get(2)).containsEntry("template", "closing");
+		assertThat(withPast.renderValues().get(1)).containsEntry("role", "BODY").containsEntry("heading", "学割が使える");
+		assertThat(withPast.renderValues().get(2)).containsEntry("role", "CLOSING");
+	}
+
+	static Stream<JsonNode> renderValuesCases() { return SharedFixtureCasesTest.cases("render-values.json", "cases"); }
+
+	private static Slide slideOf(JsonNode s) {
+		return switch (s.get("role").asString()) {
+			case "COVER" -> new Slide(new CoverContent(CoverText.restore(new CoverText.Parts(s.get("target").asString(), s.get("keyword").asString(),
+					s.get("annotation").asString(), s.get("closingWords").asString(), s.get("accent").asString())),
+					s.has("background") ? Optional.of(new CoverContent.Background(UUID.randomUUID(), s.get("background").asString())) : Optional.empty()));
+			case "BODY" -> new Slide(new BodyContent(SlideText.restore(s.get("heading").asString(), s.get("description").asString(), strings(s.get("emphases"))),
+					s.has("material") ? Optional.of(new MaterialImage(s.get("material").asString(), 800, 600, 120_000L, Optional.empty())) : Optional.empty()));
+			default -> {
+				List<PastPostCover> covers = new ArrayList<>();
+				s.get("pastPosts").forEach(p -> covers.add(PastPostCover.restore(UUID.randomUUID(), p.asString())));
+				yield new Slide(new ClosingContent(covers));
+			}
+		};
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("renderValuesCases")
+	@DisplayName("AC-002-02 テンプレートに渡す描画値は画面（TS）と同じ JSON になる（render-values.json）")
+	void renderValuesAreSharedWithScreen(JsonNode c) {
+		JsonNode input = c.get("settings");
+		PostStyleSettings base = SlideSamples.settings();
+		PostStyleSettings settings = new PostStyleSettings(UUID.randomUUID(), 1, input.get("bandText").asString(), List.of("同志社大学"),
+				input.get("closingMessage").asString(), input.get("accountIntroduction").asString(), base.captionFooter(), base.fixedHashtags(),
+				input.has("logo") ? Optional.of(input.get("logo").asString()) : Optional.empty());
+		List<Slide> slides = new ArrayList<>();
+		c.get("slides").forEach(s -> slides.add(slideOf(s)));
+		JsonMapper mapper = JsonMapper.builder().build();
+
+		JsonNode actualSettings = mapper.valueToTree(settings.renderValues());
+		JsonNode actualSlides = mapper.valueToTree(slides.stream().map(Slide::renderValues).toList());
+		assertThat(actualSettings).isEqualTo(c.get("expected").get("settings"));
+		assertThat(actualSlides).isEqualTo(c.get("expected").get("slides"));
 	}
 
 	@Test

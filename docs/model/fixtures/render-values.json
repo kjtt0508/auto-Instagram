@@ -1,0 +1,41 @@
+{
+  "$comment": "テンプレートに渡す描画値（スライドの描画値・投稿の型の設定の描画値）の共通テストケース（ADR-0005）。画面のプレビュー（TS）と画像化（Java）が同じスライド・設定から同じ JSON を作る。slides は入力（表紙: target/keyword/annotation/closingWords/accent/background、中: heading/description/emphases/material、最後: pastPosts）。background・material・logo・pastPosts は無ければキーごと出さない。expected はテンプレートが読む JSON（キーの並びは問わない）",
+  "cases": [
+    {
+      "id": "AC-002-02",
+      "name": "背景写真・素材画像・ロゴ・過去の投稿の表紙がすべてある（強調する語は絵文字の後ろ）",
+      "settings": { "bandText": "新島info", "closingMessage": "ご覧いただきありがとうございます", "accountIntroduction": "@niijima_info\n学生生活を発信中", "logo": "t/style/logo.png" },
+      "slides": [
+        { "role": "COVER", "target": "同志社大学", "keyword": "期末試験日程", "annotation": "＼ テスト前に確認 ／", "closingWords": "まとめたよ", "accent": "RED", "background": "t/backgrounds/1.jpg" },
+        { "role": "BODY", "heading": "学割が使える", "description": "😀学割を使おう", "emphases": ["学割"], "material": "t/materials/1.jpg" },
+        { "role": "CLOSING", "pastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"] }
+      ],
+      "expected": {
+        "settings": { "bandText": "新島info", "closingMessage": "ご覧いただきありがとうございます", "accountIntroduction": "@niijima_info\n学生生活を発信中", "logo": "t/style/logo.png" },
+        "slides": [
+          { "role": "COVER", "target": "同志社大学", "keyword": "期末試験日程", "annotation": "＼ テスト前に確認 ／", "closingWords": "まとめたよ", "accentStart": "#FD3432", "accentEnd": "#FE914C", "background": "t/backgrounds/1.jpg" },
+          { "role": "BODY", "heading": "学割が使える", "segments": [{ "text": "😀", "emphasized": false }, { "text": "学割", "emphasized": true }, { "text": "を使おう", "emphasized": false }], "material": "t/materials/1.jpg" },
+          { "role": "CLOSING", "pastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"] }
+        ]
+      }
+    },
+    {
+      "id": "AC-002-02",
+      "name": "背景写真・素材画像・ロゴ・過去の投稿の表紙が無い（紺の単色・文字だけのカード）。キーごと出さない",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [
+        { "role": "COVER", "target": "同志社大生", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "TEAL" },
+        { "role": "BODY", "heading": "映画が安い", "description": "学生証で割引になります", "emphases": [] },
+        { "role": "CLOSING", "pastPosts": [] }
+      ],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [
+          { "role": "COVER", "target": "同志社大生", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#19BBAA", "accentEnd": "#066A85" },
+          { "role": "BODY", "heading": "映画が安い", "segments": [{ "text": "学生証で割引になります", "emphasized": false }] },
+          { "role": "CLOSING", "pastPosts": [] }
+        ]
+      }
+    }
+  ]
+}

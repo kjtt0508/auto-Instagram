@@ -24,6 +24,23 @@ export async function convertForInstagram(file: Blob, target: { aspect?: number;
   return { blob: await encodeWithinLimit(canvas), width: canvas.width, height: canvas.height, aspect };
 }
 
+const LOGO_MAX_SIDE = 1024;
+
+/** ロゴを PNG にする（透明を保つ。長いほうの辺を 1024px 以下に縮小するだけで、切り取らない） */
+export async function convertLogo(file: Blob): Promise<Blob> {
+  const bitmap = await decode(file);
+  const scale = Math.min(1, LOGO_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("この端末では画像を変換できません");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("ロゴを PNG にできませんでした。別の画像を選んでください");
+  return blob;
+}
+
 async function decode(file: Blob): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(file, { imageOrientation: "from-image" });

@@ -33,17 +33,18 @@ const EMPTY_DRAFT: DraftContent = {
  * 投稿種別は画像の枚数で決まる。保存・承認依頼は画面下に固定する。新規の入力は端末に一時保存する
  */
 export function PostEditor({ postId, initial, title }: { postId: string | null; initial?: DraftContent; title: string }) {
-  const { tenant } = useSession();
+  const { tenant, member } = useSession();
   const router = useRouter();
+  const scope = { tenantId: tenant.id, memberId: member.id };
   // 新規なら端末に一時保存した入力から始める（この画面はログイン確認後にブラウザでだけ描かれる）
-  const [recalled] = useState(() => (postId === null ? recallNewDraft() : null));
+  const [recalled] = useState(() => (postId === null ? recallNewDraft(scope) : null));
   const [draft, setDraft] = useState<DraftContent>(() =>
     initial ?? (recalled ? { ...EMPTY_DRAFT, ...recalled, format: recalled.media.format() } : EMPTY_DRAFT));
   const [restored, setRestored] = useState(recalled !== null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   // 新規は冒頭で「写真で作る」「AIで作る」を選ぶ。作成中のAI下書きが端末に残っていればそちらから始める
-  const [source, setSource] = useState<PostSource>(() => (postId === null && hasTemplateWork() ? AI : PHOTOS));
+  const [source, setSource] = useState<PostSource>(() => (postId === null && hasTemplateWork(scope) ? AI : PHOTOS));
   const chooser = postId === null && (
     <GroupedSection title="作り方" label="作り方">
       <div className="p-2"><SegmentedControl label="作り方" options={SOURCES} selected={source} onSelect={setSource} /></div>
@@ -53,7 +54,7 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
     const next = { ...draft, ...patch };
     const updated = { ...next, format: next.media.format() };
     setDraft(updated);
-    if (postId === null) rememberNewDraft(updated);
+    if (postId === null) rememberNewDraft(scope, updated);
   };
 
   const save = async (alsoRequestApproval: boolean) => {
@@ -64,7 +65,7 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
     try {
       const saved = await saveDraft(postId, draft);
       if (alsoRequestApproval) await requestApproval(saved.postId, saved.revisionId);
-      forgetNewDraft();
+      forgetNewDraft(scope);
       router.push(`/posts/view/?id=${encodeURIComponent(saved.postId)}`);
     } catch (e) {
       setErrors([(e as Error).message]);
@@ -73,7 +74,7 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
   };
 
   const discardRestored = () => {
-    forgetNewDraft();
+    forgetNewDraft(scope);
     setDraft(EMPTY_DRAFT);
     setRestored(false);
   };

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { solidPng } from "./solidPng";
-import { useMockSupabase as mockSupabase } from "./supabaseMock";
+import { useMockSupabase as mockSupabase, type MockWorld } from "./supabaseMock";
 
 // REQ-002 単位5: S-03（作り方の2択）・S-07（AIで下書きを作る）・S-07b（手動コピペ）。Supabase と API関数は代役、375px で確かめる
 
@@ -8,7 +8,7 @@ const PHOTOS = [
   { id: "bg-1", path: "t1/backgrounds/1.jpg", description: "京都の街並み" },
   { id: "bg-2", path: "t1/backgrounds/2.jpg", description: "校舎の写真" },
 ];
-const WORLD = { role: "EDITOR" as const, heartbeatMinutesAgo: 5, posts: [], styleSettings: true, backgroundPhotos: PHOTOS };
+const WORLD: MockWorld = { role: "EDITOR", heartbeatMinutesAgo: 5, posts: [], styleSettings: true, backgroundPhotos: PHOTOS };
 
 type Body = { heading: string; description: string; emphases: string[]; picturePrompt: string; needsReplacement: boolean };
 const body = (over: Partial<Body> = {}): Body => ({
@@ -49,15 +49,27 @@ async function allowTemplateFonts(page: Page) {
   });
 }
 
-async function useAiDraftPage(page: Page, handlers: Parameters<typeof mockDraftApi>[1]) {
-  const { rpcCalls } = await mockSupabase(page, WORLD);
+async function useAiDraftPage(page: Page, handlers: Parameters<typeof mockDraftApi>[1], world: MockWorld = WORLD) {
+  const { rpcCalls, rpcLog } = await mockSupabase(page, world);
   await allowTemplateFonts(page);
   const calls = await mockDraftApi(page, handlers);
-  const saved: { p_revision: Record<string, any> }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const saved: { p_post: string | null; p_revision: Record<string, any> }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   page.on("request", (r) => { if (r.url().includes("/rpc/save_post_revision")) saved.push(r.postDataJSON()); });
   await page.goto("/posts/new/");
   await page.getByRole("radio", { name: "AIで作る" }).click();
-  return { calls, saved, rpcCalls };
+  return { calls, saved, rpcCalls, rpcLog };
+}
+
+/** プレビューの iframe を1枚ずつ見える位置まで送り（画面の外はブラウザが描画を止める）、全スライドが描き終わるのを待つ */
+async function expectAllRendered(page: Page, count: number) {
+  const frames = page.locator('iframe[sandbox="allow-scripts"]');
+  await expect(frames).toHaveCount(count);
+  // 画面の外の iframe はブラウザが描画を止めるので、1枚ずつ見える位置に送り、その1枚が描き終わってから次へ進む
+  for (let i = 0; i < count; i++) {
+    await frames.nth(i).scrollIntoViewIfNeeded();
+    await expect(page.locator("[data-render-status]").nth(i)).toHaveAttribute("data-render-status", "rendered");
+  }
+  await expect(page.locator('[data-render-status="rendered"]')).toHaveCount(count);
 }
 
 const generate = async (page: Page, idea = "学割の特集。11月3日に開催") => {
@@ -90,10 +102,8 @@ test("AC-002-01 AC-002-06 生成 → 編集 → 保存。<script> を含む見�
   // プレビュー: 4枚（表紙・中2・最後）を sandbox の iframe に描く
   await expect(page.locator('iframe[sandbox="allow-scripts"]')).toHaveCount(4);
   await expect(page.locator('iframe[sandbox="allow-scripts"]').first()).toHaveAttribute("src", "/templates/niijima@1/index.html");
-  // 画面の外のスライドは、ブラウザが描画を止めている。横にスワイプして見えるところまで来ると描かれる
-  await expect(page.locator('[data-render-status="rendered"]')).toHaveCount(2);
-  await page.locator('iframe[title="最後のスライドのプレビュー"]').scrollIntoViewIfNeeded();
-  await expect(page.locator('[data-render-status="rendered"]')).toHaveCount(4);
+  // 横にスワイプして見える位置まで送ると、すべて描き終わる
+  await expectAllRendered(page, 4);
   const heading = page.frameLocator('iframe[title="中のスライド1のプレビュー"]').locator("#body-heading");
   await expect(heading).toHaveText("<script>alert(1)");
   expect(dialogs).toEqual([]);
@@ -135,10 +145,28 @@ test("AC-002-13 ネタに無い日付には黄色の印が付き、ネタにあ�
   await expect(page.locator('mark[data-mark="unsupported"]')).toHaveText(["1000円"]);
 });
 
-test("AC-002-16 背景写真を選び直すと、保存の JSON の backgroundPhotoId が変わる", async ({ page }) => {
-  const { saved } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) });
+test("AC-002-16 背景写真が 0枚のときは表紙が紺の単色になり、保存の JSON の backgroundPhotoId は null", async ({ page }) => {
+  const { saved } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal(undefined, { backgroundPhotoId: undefined }))) },
+    { ...WORLD, backgroundPhotos: [] });
   await generate(page);
+  await expect(page.getByText("なし（紺の単色）")).toBeVisible();
   await page.getByRole("button", { name: "背景写真を選び直す" }).click();
+  await expect(page.getByText("背景写真がまだありません。管理者が登録すると選べます")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: /写真$/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "使わない（紺の単色）" }).click();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].p_revision.slides[0].backgroundPhotoId).toBeNull();
+});
+
+test("AC-002-16 背景写真が 3枚のときは、そのうち1枚が選ばれ、人が別の1枚に選び直せる（保存の JSON の backgroundPhotoId が変わる）", async ({ page }) => {
+  const three = [...PHOTOS, { id: "bg-3", path: "t1/backgrounds/3.jpg", description: "図書館の写真" }];
+  const { saved } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) }, { ...WORLD, backgroundPhotos: three });
+  await generate(page);
+  await expect(page.getByText("京都の街並み")).toBeVisible();   // AI が選んだ1枚
+  await page.getByRole("button", { name: "背景写真を選び直す" }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { pressed: true })).toHaveAccessibleName("京都の街並み");
+  await expect(page.getByRole("dialog").getByRole("button", { name: /^(京都の街並み|校舎の写真|図書館の写真)$/ })).toHaveCount(3);
   await page.getByRole("button", { name: "校舎の写真" }).click();
   await expect(page.getByText("校舎の写真")).toBeVisible();
   await page.getByRole("button", { name: "保存", exact: true }).click();
@@ -215,6 +243,10 @@ test("AC-002-07 上限・障害のときは「手動コピペで続ける」が�
 
   const sheet = page.getByRole("dialog", { name: "手動コピペで続ける" });
   await expect(sheet.getByRole("textbox", { name: "プロンプト" })).toHaveValue("次のネタから投稿を作ってください");
+  // プロンプトを用意できたら「プロンプトをコピー」は押せる見た目（薄い無効の表示ではない）
+  const copy = sheet.getByRole("button", { name: "プロンプトをコピー" });
+  await expect(copy).toBeEnabled();
+  await expect(copy).toHaveCSS("opacity", "1");
   expect(calls.find((c) => c.path.endsWith("/manual-prompt"))!.body).toEqual({ ideaId: "i-9" });
   await sheet.getByRole("textbox", { name: "貼り付ける JSON" }).fill("{ 壊れた");
   await sheet.getByRole("button", { name: "取り込む" }).click();
@@ -249,8 +281,156 @@ test("AC-002-07 修正指示が失敗したときの手動コピペは、親の�
   expect(calls.find((c) => c.path.endsWith("/manual-prompt"))!.body).toMatchObject({ ideaId: "i-1", instruction: "短くして" });
 });
 
-test("S-07 375px で横にはみ出さない（生成後）", async ({ page }) => {
+test("S-07 375px で横にはみ出さない（生成後）。プレビューの下の印は折り返さない", async ({ page }) => {
   await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) });
   await generate(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // 中のスライド2（差し替えが必要の印つき）を選ぶと「中のスライド2（編集中）」と印が並ぶ。どちらも文字は1行のまま
+  await page.getByRole("button", { name: "中のスライド2を編集" }).click();
+  const lines = (selector: string) => page.locator(selector).first().evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    // 文字の行の数（同じ高さの矩形は1行）
+    return new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top))).size;
+  });
+  await expect(page.getByRole("button", { name: "中のスライド2（編集中）" })).toBeVisible();
+  expect(await lines('button[aria-pressed="true"]')).toBe(1);
+  expect(await lines('[data-mark="replacement"]')).toBe(1);
+  await page.screenshot({ path: process.env.E2E_SHOT_DIR ? `${process.env.E2E_SHOT_DIR}/s07-375.png` : "test-results/s07-375.png", fullPage: false });
+});
+
+test("AC-002-22 キーワードを13文字・キャプション本文を上限を1文字超える長さに書き換えると、保存できず理由が出る。直すと保存できる", async ({ page }) => {
+  const { saved } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) });
+  await generate(page);
+  await page.getByRole("textbox", { name: "キーワード" }).fill("あ".repeat(13));
+  await page.getByRole("textbox", { name: "キャプション" }).fill("あ".repeat(2201));
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+
+  await expect(page.getByRole("alert").filter({ hasText: "表紙: キーワードは1〜12文字にしてください（13文字）" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "キャプションは2,200文字以内です（2,201文字）" })).toBeVisible();
+  await expect(page.locator('[data-violation="キーワード"]')).toHaveText("キーワードは1〜12文字にしてください（13文字）");
+  expect(saved).toHaveLength(0);
+
+  await page.getByRole("textbox", { name: "キーワード" }).fill("あ".repeat(12));
+  await page.getByRole("textbox", { name: "キャプション" }).fill("学割のお知らせ");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].p_revision.slides[0].keyword).toBe("あ".repeat(12));
+});
+
+test("AC-002-22 AC-002-18 「承認を依頼」も同じ検査で止まり、通れば保存してから request_approval が呼ばれる", async ({ page }) => {
+  const { saved, rpcCalls } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) });
+  await generate(page);
+  await page.getByRole("textbox", { name: "キーワード" }).fill("あ".repeat(13));
+  await page.getByRole("button", { name: "承認を依頼" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "キーワードは1〜12文字にしてください（13文字）" })).toBeVisible();
+  expect(saved).toHaveLength(0);
+  expect(rpcCalls).not.toContain("request_approval");
+
+  await page.getByRole("textbox", { name: "キーワード" }).fill("学割まとめ");
+  await page.getByRole("button", { name: "承認を依頼" }).click();
+  await expect.poll(() => rpcCalls.filter((c) => c === "save_post_revision" || c === "request_approval")).toEqual(["save_post_revision", "request_approval"]);
+  expect(saved).toHaveLength(1);
+});
+
+test("AC-002-18 承認の依頼に失敗しても投稿は二重にできない（次の保存は、保存できた投稿の新しい版になる）", async ({ page }) => {
+  const world: MockWorld = { ...WORLD, failOnce: { request_approval: { code: "P0001", message: "承認を依頼できません" } } };
+  const { saved, rpcCalls } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) }, world);
+  await generate(page);
+  await page.getByRole("button", { name: "承認を依頼" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "承認を依頼できません" })).toBeVisible();
+  expect(saved.map((s) => s.p_post)).toEqual([null]);
+
+  await page.getByRole("button", { name: "承認を依頼" }).click();
+  await expect.poll(() => saved.length).toBe(2);
+  expect(saved.map((s) => s.p_post)).toEqual([null, "new-post"]);
+  await expect.poll(() => rpcCalls.filter((c) => c === "request_approval").length).toBe(2);
+});
+
+test("AC-002-19 生成した候補を素材画像に採用すると、保存の JSON の material に生成の参照（generation）と容量が載る", async ({ page }) => {
+  await page.route("**/e2e-candidates/*.png", (route) => route.fulfill({ status: 200, contentType: "image/png", body: solidPng(1024, 1024) }));
+  await page.route("**/api/image-generations**", (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/clear")) return route.fulfill({ status: 204 });
+    return route.fulfill(json(201, {
+      generationId: "ig-1", candidates: [1, 2, 3, 4].map((position) => ({ position, url: `/e2e-candidates/${position}.png` })),
+      usage: { used: 1, dailyLimit: 20, warnRatio: 0.8 },
+    }));
+  });
+  const { saved } = await useAiDraftPage(page, { "/api/drafts": () => json(201, created(proposal())) });
+  await generate(page);
+  await page.getByRole("button", { name: "中のスライド1を編集" }).click();
+  await page.getByRole("button", { name: "絵を作る" }).click();
+  await page.getByRole("dialog", { name: "画像を生成する" }).getByRole("button", { name: "生成", exact: true }).click();
+  await page.getByRole("button", { name: "候補2" }).click();
+  await page.getByRole("button", { name: "選んだ画像を使う（1）" }).click();
+  await expect(page.getByText("AIで作った画像")).toBeVisible();
+
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  const material = saved[0].p_revision.slides[1].material;
+  expect(material).toMatchObject({ storagePath: expect.stringMatching(/^t1\/posts\/.+\.jpg$/), width: 1024, height: 768,   // 1024×1024 の候補を 4:3 に切り取る
+    generation: { generationId: "ig-1", candidatePosition: 2 } });
+  expect(material.byteSize).toBeGreaterThan(0);
+});
+
+/** 保存済みのテンプレートの投稿（下書き）。説明文は絵文字を含み、強調する語はコードポイントの位置で持つ */
+const SAVED_TEMPLATE = {
+  cover: { target: "同志社大学", keyword: "学割", annotation: "", closingWords: "まとめたよ", accent: "RED", backgroundPhotoId: "bg-1" },
+  bodies: [
+    { heading: "学割が使える", description: "😀学割を使おう👍", emphases: [{ start: 1, length: 2 }], picturePrompt: "明るいカフェ",
+      material: { path: "t1/posts/m1.jpg" } },
+    { heading: "映画が安い", description: "学生証で割引になります", emphases: [], picturePrompt: "映画館", needsReplacement: true },
+  ],
+  hashtags: ["#学割"], generationId: "g-1", caption: "学割のお知らせ",
+};
+
+test("AC-002-12 保存済みの投稿を編集すると、コードポイントの位置から強調する語に戻り、もう一度保存して同じ位置になる（絵文字を含む説明文）", async ({ page }) => {
+  await allowTemplateFonts(page);
+  await mockSupabase(page, { ...WORLD, posts: [{ id: "tp1", status: "DRAFT", template: SAVED_TEMPLATE }] });
+  const saved: { p_post: string | null; p_revision: Record<string, any> }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+  page.on("request", (r) => { if (r.url().includes("/rpc/save_post_revision")) saved.push(r.postDataJSON()); });
+  await page.goto("/posts/edit/?id=tp1");
+  await page.getByRole("button", { name: "中のスライド1を編集" }).click();
+  await expect(page.getByRole("textbox", { name: "強調する語" })).toHaveValue("学割");
+  await expect(page.getByRole("textbox", { name: "説明文" })).toHaveValue("😀学割を使おう👍");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].p_post).toBe("tp1");
+  expect(saved[0].p_revision.slides[1]).toMatchObject({ description: "😀学割を使おう👍", emphases: [{ start: 1, length: 2 }],
+    material: { storagePath: "t1/posts/m1.jpg", width: 1200, height: 900, byteSize: 150000 } });
+  expect(saved[0].p_revision).toMatchObject({ generationId: "g-1", hashtags: ["#学割"] });
+});
+
+test("AC-002-12 説明文の前に絵文字を足してから保存すると、強調する語の位置はコードポイントで1つ後ろになる", async ({ page }) => {
+  await allowTemplateFonts(page);
+  await mockSupabase(page, { ...WORLD, posts: [{ id: "tp1", status: "DRAFT", template: SAVED_TEMPLATE }] });
+  const saved: { p_revision: Record<string, any> }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+  page.on("request", (r) => { if (r.url().includes("/rpc/save_post_revision")) saved.push(r.postDataJSON()); });
+  await page.goto("/posts/edit/?id=tp1");
+  await page.getByRole("button", { name: "中のスライド1を編集" }).click();
+  await page.getByRole("textbox", { name: "説明文" }).fill("🎉😀学割を使おう👍");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0].p_revision.slides[1].emphases).toEqual([{ start: 2, length: 2 }]);
+});
+
+test("AC-002-19 AC-002-02 S-04 テンプレートの投稿の詳細: スライドのプレビュー・最後のスライドの注記・公開用キャプション、写真風の素材画像で承認時の確認が出る", async ({ page }) => {
+  await allowTemplateFonts(page);
+  const photoreal = { ...SAVED_TEMPLATE, bodies: [{ ...SAVED_TEMPLATE.bodies[0], material: { path: "t1/posts/m1.jpg", style: "PHOTOREALISTIC" as const } }, SAVED_TEMPLATE.bodies[1]] };
+  await mockSupabase(page, { ...WORLD, role: "APPROVER", posts: [{ id: "tp2", status: "AWAITING_APPROVAL", template: photoreal }] });
+  await page.goto("/posts/view/?id=tp2");
+
+  await expect(page.getByRole("list", { name: "スライドのプレビュー" })).toBeVisible();
+  await expectAllRendered(page, 4);   // 表紙・中2・最後のスライド
+  await expect(page.getByText("過去の投稿は承認した時点の新しい2件が入ります")).toBeVisible();
+  await expect(page.locator('[data-mark="replacement"]')).toHaveCount(1);
+  const caption = page.getByText("学割のお知らせ").first();
+  await expect(caption).toContainText("学割のお知らせ");
+  await expect(caption).toContainText("※画像はAIで生成したイメージです");
+  await expect(caption).toContainText("#新島info");
+  await expect(caption).toContainText("#学割");
+  await expect(page.getByText("写真風の生成画像を含みます。実際の出来事・場所・人の写真として使っていないか、実在の人物・商標が写っていないか確認してください")).toBeVisible();
+  await expect(page.getByRole("button", { name: "承認して予約" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

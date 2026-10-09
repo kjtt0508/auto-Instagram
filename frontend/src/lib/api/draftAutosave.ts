@@ -2,12 +2,14 @@ import { GeneratedImage } from "@/domain/post/GeneratedImage";
 import { PostMedia } from "@/domain/post/PostMedia";
 import { PostMediaList } from "@/domain/post/PostMediaList";
 import { PrCategory } from "@/domain/post/PrCategory";
+import { ownsPath, scopedKey, type AutosaveScope } from "./autosaveScope";
 import type { DraftContent } from "./postCommands";
 
 // 作成中の新しい投稿を端末（localStorage）に一時保存する。スマホでカメラを開いて戻ったときや、
 // 画面が再読み込みされたときに入力が消えないようにする。保存（RPC）できたら消す。端末の外には出さない
 // 生成画像の由来（画像生成・位置・画像の種類）も残す。消えると写真風なのにAI生成の表示が付かなくなる（REQ-005）
-const KEY = "niijimaig:new-post-draft";
+// キーに団体IDとメンバーIDを含め、復元のときは保存先が自団体のものか確かめる（autosaveScope）
+const keyOf = (scope: AutosaveScope) => scopedKey("post-draft", scope);
 
 type StoredMedia = {
   position: number; storagePath: string; width: number; height: number; byteSize: number;
@@ -23,20 +25,21 @@ const toStored = (m: PostMedia): StoredMedia => {
   return { position, storagePath, width, height, byteSize, generated };
 };
 
-export function rememberNewDraft(draft: DraftContent): void {
+export function rememberNewDraft(scope: AutosaveScope, draft: DraftContent): void {
   const stored: Stored = { captionText: draft.captionText, prCategory: draft.prCategory.code, media: draft.media.items().map(toStored) };
   try {
-    localStorage.setItem(KEY, JSON.stringify(stored));
+    localStorage.setItem(keyOf(scope), JSON.stringify(stored));
   } catch {
     // 保存できない端末（プライベートブラウズ等）では一時保存しない
   }
 }
 
 /** 一時保存した内容。無ければ・壊れていれば null */
-export function recallNewDraft(): Omit<DraftContent, "format" | "genreId"> | null {
+export function recallNewDraft(scope: AutosaveScope): Omit<DraftContent, "format" | "genreId"> | null {
   try {
-    const stored = JSON.parse(localStorage.getItem(KEY) ?? "null") as Stored | null;
+    const stored = JSON.parse(localStorage.getItem(keyOf(scope)) ?? "null") as Stored | null;
     if (!stored || (stored.captionText === "" && stored.media.length === 0)) return null;
+    if (!stored.media.every((m) => ownsPath(scope, m.storagePath))) return null;
     const media = PostMediaList.of(stored.media.map((m) => PostMedia.of({ position: m.position, storagePath: m.storagePath,
       width: m.width, height: m.height, bytes: m.byteSize, generated: m.generated ? GeneratedImage.of(m.generated) : null })));
     return { captionText: stored.captionText, prCategory: PrCategory.from(stored.prCategory), media };
@@ -45,9 +48,9 @@ export function recallNewDraft(): Omit<DraftContent, "format" | "genreId"> | nul
   }
 }
 
-export function forgetNewDraft(): void {
+export function forgetNewDraft(scope: AutosaveScope): void {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(keyOf(scope));
   } catch {
     // 何もしない
   }

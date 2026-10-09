@@ -38,7 +38,7 @@ export const sampleBody = (material?: MaterialImage): BodyContent => BodyContent
 
 /** 生成画像（種類を指定）の素材画像。人が差し替えた画像なら style を省く */
 export const sampleMaterial = (styleCode?: string): MaterialImage => MaterialImage.of({
-  storagePath: "t/materials/1.jpg", width: 800, height: 600,
+  storagePath: "t/materials/1.jpg", width: 800, height: 600, byteSize: 120_000,
   generated: styleCode ? GeneratedImage.of({ generationId: "g1", candidatePosition: 1, styleCode }) : undefined,
 });
 

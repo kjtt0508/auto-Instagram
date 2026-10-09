@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../../../docs/model/fixtures/slide-list.json";
-import { sampleBody, sampleCoverText, sampleMaterial, sampleSlides } from "../__tests__/samples";
+import renderValues from "../../../../docs/model/fixtures/render-values.json";
+import { sampleBody, sampleCoverText, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
 import { PastPostCover } from "../post/PastPostCover";
+import { PostStyleSettings } from "../post/PostStyleSettings";
 import { BodyContent } from "./BodyContent";
 import { ClosingContent } from "./ClosingContent";
 import { CoverContent } from "./CoverContent";
+import { CoverText } from "./CoverText";
+import { MaterialImage } from "./MaterialImage";
 import { Slide } from "./Slide";
 import { SlideList } from "./SlideList";
 import { SlideRole } from "./SlideRole";
+import { SlideText } from "./SlideText";
 
 const ROLE_OF_LETTER: Record<string, SlideRole> = { C: SlideRole.COVER, B: SlideRole.BODY, X: SlideRole.CLOSING };
 
@@ -82,7 +87,64 @@ describe("スライド構成の操作", () => {
     expect(stored.map((s) => s.role)).toEqual(["COVER", "BODY", "CLOSING"]);
     expect(stored[0]).toMatchObject({ target: "同志社大学", accent: "PURPLE", backgroundPhotoId: "bg1" });
     expect(stored[1]).toMatchObject({ emphases: [{ start: 0, length: 3 }], needsReplacement: false,
-      material: { storagePath: "t/materials/1.jpg", generation: { generationId: "g1", candidatePosition: 1 } } });
+      material: { storagePath: "t/materials/1.jpg", byteSize: 120_000, generation: { generationId: "g1", candidatePosition: 1 } } });
+  });
+
+  it("素材画像は容量が正の数でなければ作れない（保存先→容量の表は持たず、素材画像が持つ）", () => {
+    expect(() => MaterialImage.of({ storagePath: "t/a.jpg", width: 800, height: 600, byteSize: 0 })).toThrow("正の数");
+    expect(sampleMaterial().byteSize).toBe(120_000);
+  });
+
+  it("位置から、中のスライドの何枚目かを返す（表紙・最後のスライドは 0）", () => {
+    const slides = sampleSlides([sampleBody(), sampleBody(), sampleBody()]);
+    expect([0, 1, 2, 3, 4].map((i) => slides.bodyNumberAt(i))).toEqual([0, 1, 2, 3, 0]);
+  });
+
+  it("AC-002-22 人が書き換えた文言の違反は、どのスライドかを添えて列挙する（保存と承認の依頼の前に確かめる）", () => {
+    const long = CoverContent.of(CoverText.restore({ target: "同志社大学", keyword: "あ".repeat(13), annotation: "", closingWords: "まとめたよ", accentCode: "PURPLE" }));
+    const slides = SlideList.of([Slide.createCover(long), Slide.createBody(sampleBody()),
+      Slide.createBody(BodyContent.of({ text: SlideText.restore({ heading: "", description: "あ", emphases: [] }), brief: sampleBody().brief })),
+      Slide.createClosing(ClosingContent.empty())]);
+    const violations = slides.textViolations(sampleSettings());
+    expect(violations.some((v) => v.startsWith("表紙: ") && v.includes("12文字"))).toBe(true);
+    expect(violations.filter((v) => v.startsWith("中のスライド2枚目: "))).toHaveLength(1);
+    expect(violations.some((v) => v.startsWith("中のスライド1枚目: "))).toBe(false);
+  });
+});
+
+describe("テンプレートに渡す描画値（fixtures/render-values.json。Java の画像化と同じ JSON）", () => {
+  type Input = (typeof renderValues.cases)[number]["slides"][number] & Record<string, unknown>;
+  const slideOf = (s: Input): Slide => {
+    if (s.role === "COVER") {
+      return Slide.createCover(CoverContent.of(CoverText.restore({ target: s.target as string, keyword: s.keyword as string,
+        annotation: s.annotation as string, closingWords: s.closingWords as string, accentCode: s.accent as string }),
+      s.background ? { photoId: "bg", storagePath: s.background as string } : undefined));
+    }
+    if (s.role === "BODY") {
+      return Slide.createBody(BodyContent.of({
+        text: SlideText.restore({ heading: s.heading as string, description: s.description as string, emphases: s.emphases as string[] }),
+        brief: sampleBody().brief,
+        material: s.material ? MaterialImage.of({ storagePath: s.material as string, width: 800, height: 600, byteSize: 120_000 }) : undefined,
+      }));
+    }
+    return Slide.createClosing(ClosingContent.of((s.pastPosts as string[]).map((p, i) => PastPostCover.of(`p${i}`, p, "own"))));
+  };
+
+  it.each(renderValues.cases)("$id $name", (c) => {
+    const base = sampleSettings();
+    const settings = PostStyleSettings.of({ tenantId: "t1", version: 1, bandText: c.settings.bandText, coverTargets: ["同志社大学"],
+      closingMessage: c.settings.closingMessage, accountIntroduction: c.settings.accountIntroduction,
+      captionFooter: base.captionFooter(), fixedHashtags: base.fixedHashtags(), logoStoragePath: (c.settings as { logo?: string }).logo });
+    const slides = c.slides.map((s) => slideOf(s as Input));
+
+    expect(JSON.parse(JSON.stringify(settings.renderValues()))).toEqual(c.expected.settings);
+    expect(JSON.parse(JSON.stringify(slides.map((s) => s.renderValues())))).toEqual(c.expected.slides);
+  });
+});
+
+describe("スライド構成の操作（続き）", () => {
+  it("BR-002-11 画面が表示する枚数の上限・下限は定数から作る", () => {
+    expect([SlideList.BODY_MIN, SlideList.BODY_MAX, PastPostCover.MAX_COUNT]).toEqual([1, 8, 2]);
   });
 
   it("BR-002-15 過去の投稿の表紙は3件以上渡せない", () => {

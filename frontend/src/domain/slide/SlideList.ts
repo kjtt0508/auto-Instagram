@@ -61,16 +61,20 @@ export class SlideList {
    * 承認を依頼する前にここで確かめる。どのスライドかを頭に添える
    */
   textViolations(settings: PostStyleSettings): string[] {
-    let bodyNumber = 0;
-    return this.slides.flatMap((s) => {
+    return this.slides.flatMap((s, index) => {
       const cover = s.coverContent();
       if (cover) return cover.text.violations(settings).map((v) => `表紙: ${v}`);
       const body = s.bodyContent();
       if (!body) return [];
-      bodyNumber += 1;
       return [...body.text.violations(), ...PictureBrief.violationsOf(body.brief.promptText()).map((v) => `絵の指示: ${v}`)]
-        .map((v) => `中のスライド${bodyNumber}枚目: ${v}`);
+        .map((v) => `中のスライド${this.bodyNumberAt(index)}枚目: ${v}`);
     });
+  }
+
+  /** 位置（0始まり）のスライドが、中のスライドの何枚目か（1始まり。中のスライドでなければ 0） */
+  bodyNumberAt(index: number): number {
+    if (this.slides[index]?.role !== SlideRole.BODY) return 0;
+    return this.slides.slice(0, index + 1).filter((s) => s.role === SlideRole.BODY).length;
   }
 
   items(): readonly Slide[] {

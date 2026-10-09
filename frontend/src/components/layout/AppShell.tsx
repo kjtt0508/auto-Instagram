@@ -33,7 +33,7 @@ function TabBar() {
       <ul className="mx-auto grid max-w-xl grid-cols-3">
         {TABS.map((tab) => (
           <li key={tab.href}>
-            <Link href={tab.href} aria-current={pathname === tab.href ? "page" : undefined}
+            <Link href={tab.href} aria-current={pathname === tab.href || (tab.href !== "/" && pathname.startsWith(tab.href)) ? "page" : undefined}
               className="flex min-h-12 flex-col items-center justify-center gap-0.5 pt-1.5 text-[10px] font-medium text-neutral aria-[current=page]:text-tint">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6 fill-none stroke-current" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round">
                 <path d={tab.icon} />

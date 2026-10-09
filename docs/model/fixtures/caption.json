@@ -48,5 +48,9 @@
     { "id": "AC-002-18", "name": "PR案件で写真風の素材画像を含む本文2,092文字は2,201文字になり、PR表記とAI生成の表示の名前を添えて拒否", "segments": [{ "repeat": "あ", "count": 2092 }], "prCategory": "PR", "aiDisclosure": true, "additionalHashtags": [], "publishValid": false, "violation": "PR表記とAI生成の表示を含めて2,200文字以内にしてください（2,201文字）" },
     { "id": "BR-002-16", "name": "本文のハッシュタグ28個＋固定2個の30個は受け付ける（本文にハッシュタグが混ざっても拒否せず、数に数える）", "segments": [{ "repeat": "#タグ ", "count": 28 }], "prCategory": "NONE", "additionalHashtags": [], "publishValid": true },
     { "id": "BR-002-16", "name": "本文のハッシュタグ29個＋固定2個の31個は拒否", "segments": [{ "repeat": "#タグ ", "count": 29 }], "prCategory": "NONE", "additionalHashtags": [], "publishValid": false, "violation": "ハッシュタグは30個までです（31個）" }
+  ],
+  "hashtagMerges": [
+    { "id": "AC-002-17", "name": "固定が先・重複は1つ", "fixed": ["#同志社大学", "#同志社"], "additional": ["#学割", "#同志社", "#京都"], "merged": ["#同志社大学", "#同志社", "#学割", "#京都"] },
+    { "id": "AC-002-17", "name": "形が正しくない追加分（# で始まらない・空白を含む・# だけ）は並べない。理由は承認の前に violationsOfAdditional が出す", "fixed": ["#同志社大学", "#同志社"], "additional": ["学割", "#京 都", "#京都", "#"], "merged": ["#同志社大学", "#同志社", "#京都"] }
   ]
 }

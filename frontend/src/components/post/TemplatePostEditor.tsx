@@ -11,8 +11,6 @@ import type { LlmUsage } from "@/domain/draft/LlmUsage";
 import { RevisionInstruction } from "@/domain/draft/RevisionInstruction";
 import { unsupportedFactsInWork } from "@/domain/draft/unsupportedFacts";
 import type { GeneratedImage } from "@/domain/post/GeneratedImage";
-import { Caption } from "@/domain/post/Caption";
-import { PostRevision } from "@/domain/post/PostRevision";
 import type { PostStyleSettings } from "@/domain/post/PostStyleSettings";
 import { BodyContent } from "@/domain/slide/BodyContent";
 import { MaterialImage } from "@/domain/slide/MaterialImage";
@@ -26,11 +24,12 @@ import {
 import { uploadDraftImage } from "@/lib/api/mediaStorage";
 import { requestApproval, saveTemplateDraft } from "@/lib/api/postCommands";
 import { currentStyleSettings, usableBackgroundPhotos, type BackgroundPhoto } from "@/lib/api/styleRepository";
-import {
-  EMPTY_TEMPLATE_WORK, forgetTemplateWork, recallTemplateWork, rememberTemplateWork, type TemplateWork,
-} from "@/lib/api/templateDraftAutosave";
+import { forgetTemplateWork, recallTemplateWork, rememberTemplateWork } from "@/lib/api/templateDraftAutosave";
 import { convertForInstagram } from "@/lib/image/imageConversion";
-import { CURRENT_TEMPLATE_VERSION, MATERIAL_ASPECT } from "@/lib/template/templateRelease";
+import { MATERIAL_ASPECT, CURRENT_TEMPLATE_VERSION } from "@/lib/template/templateRelease";
+import {
+  additionalHashtagsOf, EMPTY_TEMPLATE_WORK, isRevision, revisionOf, toDraftContent, withDraft, withMaterial, type TemplateWork,
+} from "@/lib/template/templateWork";
 import { ImageGenerationSheet, type ChosenCandidate } from "./ImageGenerationSheet";
 import { ManualRelaySheet, type ManualRevision } from "./ManualRelaySheet";
 import { NavigationBar } from "./NavigationBar";
@@ -41,8 +40,6 @@ import { TemplateCaptionSection } from "./TemplateCaptionSection";
 type Setup = { settings: PostStyleSettings | null; photos: BackgroundPhoto[] };
 type Failure = { message: string; lines: string[]; manual: boolean; revising: boolean };
 
-const hashtagsOf = (work: TemplateWork): string[] => work.hashtagText.split(/\s+/u).filter((t) => t !== "");
-
 /**
  * S-07 AIで下書きを作る: ①ネタ ②生成 ③スライドのプレビュー ④選んだスライドの編集 ⑤キャプション ⑥修正指示と作り直す ⑦保存・承認を依頼。
  * 判断（文字数・強調する語・構成・キャプションの上限・ネタに無い情報）はドメインに尋ね、ここは入力と表示をつなぐ。
@@ -51,9 +48,13 @@ const hashtagsOf = (work: TemplateWork): string[] => work.hashtagText.split(/\s+
 export function TemplatePostEditor({ postId, initial, title, chooser }: {
   postId: string | null; initial?: TemplateWork; title: string; chooser?: ReactNode;
 }) {
-  const { tenant } = useSession();
+  const { tenant, member } = useSession();
   const router = useRouter();
-  const [recalled] = useState(() => (postId === null && !initial ? recallTemplateWork() : null));
+  const scope = { tenantId: tenant.id, memberId: member.id };
+  // 保存できた投稿（承認の依頼に失敗したとき、次の保存は同じ投稿の新しい版にする。投稿が二重にできない）
+  const [savedPostId, setSavedPostId] = useState<string | null>(null);
+  const targetId = postId ?? savedPostId;
+  const [recalled] = useState(() => (postId === null && !initial ? recallTemplateWork(scope) : null));
   const [work, setWork] = useState<TemplateWork>(() => initial ?? recalled ?? EMPTY_TEMPLATE_WORK);
   const [restored, setRestored] = useState(recalled !== null);
   const [setup, setSetup] = useState<Setup | null>(null);
@@ -77,16 +78,13 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
   const update = (patch: Partial<TemplateWork>) => {
     const next = { ...work, ...patch };
     setWork(next);
-    if (postId === null) rememberTemplateWork(next);
+    if (targetId === null) rememberTemplateWork(scope, next);
   };
 
   const settings = setup?.settings ?? null;
   const slides = work.slides;
-  const tags = hashtagsOf(work);
-  const revision = settings && slides ? PostRevision.ofSlides({
-    caption: Caption.restore(work.captionText), prCategory: work.prCategory, slides, templateVersion: CURRENT_TEMPLATE_VERSION,
-    settings, additionalHashtags: tags,
-  }) : null;
+  const tags = additionalHashtagsOf(work);
+  const revision = revisionOf(work, settings);
   // 編集中の既存の投稿はネタを持たない（ネタに無い情報は、ネタがあるときだけ確かめる）
   const facts = slides && work.ideaText !== "" ? unsupportedFactsInWork(work.ideaText, slides, work.captionText) : [];
   const ideaIssues = work.ideaText === "" ? [] : Idea.violationsOf(work.ideaText);
@@ -97,16 +95,9 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
     if (!settings || !setup) return;
     const parsed = DraftProposal.parse(response.proposal, { settings, prLabel: tenant.prLabel, sourceUrlRequired: false });
     if (!parsed.proposal) throw new Error(parsed.violations.join("\n"));
-    const draft = parsed.proposal;
-    const common = { ideaId: response.ideaId, generationId: response.generationId, captionText: draft.caption.text, hashtagText: draft.additionalHashtags.join(" ") };
-    if (response.parentGenerationId !== undefined && slides) {
-      update({ ...common, slides: slides.withDraftText(draft) });
-    } else {
-      const photo = setup.photos.find((p) => p.id === draft.backgroundPhotoId);
-      update({ ...common, slides: SlideList.createFromDraft(draft, photo && { photoId: photo.id, storagePath: photo.storagePath }),
-        prCategory: draft.prCategory, sourceUrls: [...draft.sourceUrls], materialBytes: {} });
-      setSelected(0);
-    }
+    // 取り込み方（置き換えか文言だけか）は作業中の内容が決める
+    if (!isRevision(work, response)) setSelected(0);
+    update(withDraft(work, parsed.proposal, response, setup.photos));
     setUsage(response.usage);
     setFailure(null);
   };
@@ -152,18 +143,17 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
     setSheet("manual");
   };
 
-  const replaceSlide = (index: number, slide: Slide, extra: Partial<TemplateWork> = {}) => {
-    if (slides) update({ slides: slides.withSlideReplaced(index, slide), ...extra });
+  const replaceSlide = (index: number, slide: Slide) => {
+    if (slides) update({ slides: slides.withSlideReplaced(index, slide) });
   };
 
-  /** 素材画像を4:3に切り取って保存し、選んだ中のスライドに載せる */
+  /** 素材画像を4:3に切り取って保存し、選んだ中のスライドに載せる（容量は素材画像が持つ） */
   const adoptMaterial = async (index: number, image: Blob, generated?: GeneratedImage) => {
-    const body = slides?.items()[index]?.bodyContent();
-    if (!slides || !body) return;
+    if (!slides?.items()[index]?.bodyContent()) return;
     const converted = await convertForInstagram(image, { aspect: MATERIAL_ASPECT, focus: 0.5 });
     const storagePath = await uploadDraftImage(tenant, converted.blob);
-    const material = MaterialImage.of({ storagePath, width: converted.width, height: converted.height, generated });
-    replaceSlide(index, Slide.createBody(body.withMaterial(material)), { materialBytes: { ...work.materialBytes, [storagePath]: converted.blob.size } });
+    const material = MaterialImage.of({ storagePath, width: converted.width, height: converted.height, byteSize: converted.blob.size, generated });
+    update(withMaterial(work, index, material));
   };
 
   const replaceImage = async (index: number, file: File) => {
@@ -200,15 +190,16 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
 
   const save = async (alsoRequestApproval: boolean) => {
     if (!slides || !revision) return;
-    const violations = alsoRequestApproval ? revision.violationsForApproval(tenant.prLabel) : Caption.violationsOf(work.captionText);
+    // 人の書き換えにも AI の出力と同じ検査をかけ、満たさなければ保存しない（BR-002-18）。承認の依頼も同じ条件
+    const violations = alsoRequestApproval ? revision.violationsForApproval(tenant.prLabel) : revision.violationsForSaving(tenant.prLabel);
     if (violations.length > 0) return setErrors(violations);
     setSaving(true);
     setErrors([]);
     try {
-      const saved = await saveTemplateDraft(postId, { slides, captionText: work.captionText, prCategory: work.prCategory,
-        additionalHashtags: tags, generationId: work.generationId, materialBytes: work.materialBytes });
+      const saved = await saveTemplateDraft(targetId, toDraftContent({ ...work, slides }));
+      setSavedPostId(saved.postId);
+      forgetTemplateWork(scope);
       if (alsoRequestApproval) await requestApproval(saved.postId, saved.revisionId);
-      forgetTemplateWork();
       router.push(`/posts/view/?id=${encodeURIComponent(saved.postId)}`);
     } catch (e) {
       setErrors([(e as Error).message]);
@@ -217,7 +208,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
   };
 
   const discardRestored = () => {
-    forgetTemplateWork();
+    forgetTemplateWork(scope);
     setWork(EMPTY_TEMPLATE_WORK);
     setRestored(false);
   };
@@ -225,7 +216,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
   const selectedSlide = slides?.items()[selected];
   const cover = selectedSlide?.coverContent();
   const body = selectedSlide?.bodyContent();
-  const bodyNumber = slides ? slides.items().slice(0, selected + 1).filter((s) => s.bodyContent()).length : 0;
+  const bodyNumber = slides?.bodyNumberAt(selected) ?? 0;
   const factsFor = (prefix: string): Fact[] => facts.filter((f) => f.location.startsWith(prefix))
     .map((f) => ({ ...f, location: f.location.slice(prefix.length) }));
   const editing = busy !== null || saving;
@@ -264,7 +255,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
         <fieldset disabled={editing} className="min-w-0">
           <SlidePreview slides={slides} settings={settings} templateVersion={CURRENT_TEMPLATE_VERSION} selectedIndex={selected} onSelect={setSelected} />
           <div className="mt-2"><Button variant="tinted" block disabled={!slides.canAddBody()} onClick={addBody}>中のスライドを追加</Button></div>
-          {!slides.canAddBody() && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは8枚までです</p>}
+          {!slides.canAddBody() && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは{SlideList.BODY_MAX}枚までです</p>}
 
           {cover && <CoverFields key={`${selected}:${work.generationId}`} cover={cover} settings={settings} photos={setup.photos}
             facts={facts} onChange={(next) => replaceSlide(selected, Slide.createCover(next))} />}
@@ -321,7 +312,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
 }
 
 const stateOf = (work: TemplateWork) => ({
-  captionText: work.captionText, additionalHashtags: hashtagsOf(work), prCategory: work.prCategory, sourceUrls: work.sourceUrls,
+  captionText: work.captionText, additionalHashtags: additionalHashtagsOf(work), prCategory: work.prCategory, sourceUrls: work.sourceUrls,
 });
 
 function IdeaFooter({ remaining, issues, regenerating }: { remaining: number; issues: readonly string[]; regenerating: boolean }) {

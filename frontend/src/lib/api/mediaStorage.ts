@@ -23,6 +23,22 @@ export async function uploadDraftImage(tenant: Tenant, jpeg: Blob): Promise<stri
   return path;
 }
 
+async function uploadTo(path: string, image: Blob, contentType: string): Promise<string> {
+  const { error } = await supabase().storage.from(BUCKET).upload(path, image, { contentType });
+  if (error) throw new Error(`画像を保存できませんでした: ${error.message}`);
+  return path;
+}
+
+/** 変換済みの JPEG を背景写真の保存先（管理者だけが書ける）に保存し、パスを返す */
+export function uploadBackgroundPhoto(tenant: Tenant, jpeg: Blob): Promise<string> {
+  return uploadTo(tenant.backgroundPathFor(newFileId()), jpeg, "image/jpeg");
+}
+
+/** 変換済みの PNG を投稿の型の設定のロゴの保存先（管理者だけが書ける）に保存し、パスを返す */
+export function uploadStyleLogo(tenant: Tenant, png: Blob): Promise<string> {
+  return uploadTo(tenant.logoPathFor(newFileId()), png, "image/png");
+}
+
 /** 画面に表示するための期限付き URL（保存先のパス → URL） */
 export async function viewUrls(paths: readonly string[]): Promise<Map<string, string>> {
   if (paths.length === 0) return new Map();

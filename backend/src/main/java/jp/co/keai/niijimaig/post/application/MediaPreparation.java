@@ -80,9 +80,13 @@ public class MediaPreparation {
 				clock.instant());
 	}
 
-	/** 一時的な失敗: ジョブを次の定期処理で再試行する。3回目も失敗したら画像化の失敗にする */
+	/**
+	 * 一時的な失敗: ジョブを次の定期処理で再試行する。3回目も失敗したら画像化の失敗にする。
+	 * ただし持ち時間切れで、この試行で1枚でも進んでいれば回数に数えない（1回の tick で1枚ずつしか描けなくても、全部描き終わる前に失敗にしない）。
+	 * 1枚も進まなかった持ち時間切れは数える（進まない状態が続いたら失敗にする）
+	 */
 	private void retryLater(ClaimedJob claimed, Post post, RenderTemporaryFailureException e) {
-		Job next = claimed.job().failedOrRetry();
+		Job next = e.deferrable() ? claimed.job().deferred() : claimed.job().failedOrRetry();
 		if (next.isFinallyFailed()) {
 			failNow(claimed, post, "画像化の準備を完了できませんでした（" + e.code() + "）");
 			return;

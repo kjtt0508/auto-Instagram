@@ -28,19 +28,20 @@ export function SlidePreview({ slides, settings, templateVersion, selectedIndex,
   return (
     <ul aria-label="スライドのプレビュー" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 pt-2">
       {items.map((slide, index) => {
-        const caption = captionOf(slide, index, items);
+        const caption = captionOf(slide, index, slides);
         const selected = selectedIndex === index;
         return (
           <li key={index} className="w-[72%] shrink-0 snap-center">
             <div className={`rounded-cell ${selected ? "ring-4 ring-tint" : ""}`}>
               <SlideFrame slide={slide} settings={settings} version={templateVersion} images={images} label={caption} />
             </div>
-            <div className="flex min-h-9 items-center justify-between gap-2 pt-1 text-[13px]">
+            {/* 狭い幅（375px）でも文字は折り返さない。入りきらない印は次の行に回す */}
+            <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-1 text-[13px]">
               {onSelect ? (
-                <button type="button" aria-pressed={selected} onClick={() => onSelect(index)} className="min-h-9 text-tint aria-pressed:font-semibold">
+                <button type="button" aria-pressed={selected} onClick={() => onSelect(index)} className="min-h-9 whitespace-nowrap text-tint aria-pressed:font-semibold">
                   {caption}{selected ? "（編集中）" : "を編集"}
                 </button>
-              ) : <span className="text-secondary-label">{caption}</span>}
+              ) : <span className="whitespace-nowrap text-secondary-label">{caption}</span>}
               {slide.bodyContent()?.brief.needsReplacement() && (
                 <span data-mark="replacement" className="shrink-0 whitespace-nowrap rounded-full bg-caution px-2 py-0.5 font-semibold text-black">差し替えが必要</span>
               )}
@@ -53,9 +54,8 @@ export function SlidePreview({ slides, settings, templateVersion, selectedIndex,
   );
 }
 
-function captionOf(slide: Slide, index: number, all: readonly Slide[]): string {
-  const bodyNumber = all.slice(0, index + 1).filter((s) => s.bodyContent()).length;
-  return slide.bodyContent() ? `${slide.role.label}${bodyNumber}` : slide.role.label;
+function captionOf(slide: Slide, index: number, slides: SlideList): string {
+  return slide.bodyContent() ? `${slide.role.label}${slides.bodyNumberAt(index)}` : slide.role.label;
 }
 
 /** スライド全体で使う画像（背景写真・素材画像・ロゴ）を data URL にして持つ。読み込めた保存先だけが入る */
@@ -84,10 +84,14 @@ function SlideFrame({ slide, settings, version, images, label }: {
   const [status, setStatus] = useState<Status>("loading");
 
   const refs = [...slide.imageRefs(), ...(slide.closingContent() && settings.logoStoragePath ? [settings.logoStoragePath] : [])];
+  // 画像（data URL）は大きいので、描画のたびに JSON にしない。文言だけを文字列で比べ、画像は読み込めた保存先の並び（保存先ごとに画像は変わらない）で比べる
   const present = Object.fromEntries(refs.flatMap((r) => (images.map.has(r) ? [[r, images.map.get(r)!]] : [])));
+  const presentKey = Object.keys(present).join("|");
+  const presentRef = useRef(present);
+  useEffect(() => { presentRef.current = present; });
   const ready = refs.every((r) => images.map.has(r));
   const imagesFailed = images.done && !ready;
-  const payload = ready ? JSON.stringify({ slide: slide.renderValues(), settings: settings.renderValues(), images: present }) : null;
+  const textKey = JSON.stringify({ slide: slide.renderValues(), settings: settings.renderValues() });
 
   useEffect(() => {
     const element = box.current;
@@ -98,10 +102,10 @@ function SlideFrame({ slide, settings, version, images, label }: {
   }, []);
 
   useEffect(() => {
-    if (!loaded || payload === null) return;
+    if (!loaded || !ready) return;
     requestId.current += 1;
-    frame.current?.contentWindow?.postMessage({ type: "render", requestId: requestId.current, data: JSON.parse(payload) }, "*");
-  }, [loaded, payload]);
+    frame.current?.contentWindow?.postMessage({ type: "render", requestId: requestId.current, data: { ...JSON.parse(textKey), images: presentRef.current } }, "*");
+  }, [loaded, ready, textKey, presentKey]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

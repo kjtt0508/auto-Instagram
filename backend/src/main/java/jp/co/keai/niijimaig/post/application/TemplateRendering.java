@@ -58,15 +58,22 @@ class TemplateRendering implements PreparationMethod {
 		RenderPlan plan = post.revision().renderPlan(pastPosts)
 				.orElseThrow(() -> new IllegalStateException("画像化できない投稿の版です"));
 		List<RenderPlan.SlideRender> slides = plan.slides();
+		boolean progressed = false;
 		for (int i = 0; i < slides.size(); i++) {
-			prepareSlide(new Target(post, approval, i + 1), plan, slides.get(i), deadline);
+			try {
+				progressed |= prepareSlide(new Target(post, approval, i + 1), plan, slides.get(i), deadline);
+			} catch (RenderTemporaryFailureException e) {
+				// 持ち時間切れには、この試行で進んだかを添える（進んでいれば MediaPreparation が試行回数に数えない）
+				throw e.isTimeBudget() ? RenderTemporaryFailureException.timeBudget(progressed) : e;
+			}
 		}
 	}
 
-	private void prepareSlide(Target target, RenderPlan plan, RenderPlan.SlideRender slide, Instant deadline) {
+	/** 1枚を準備する。新しく公開用まで進めたら true（記録済みで何もしなかったら false） */
+	private boolean prepareSlide(Target target, RenderPlan plan, RenderPlan.SlideRender slide, Instant deadline) {
 		UUID revisionId = target.post().approvedRevisionId();
 		if (guarded("RECORD_UNAVAILABLE", () -> records.publishMedia(revisionId, target.approval(), target.position())).isPresent()) {
-			return;
+			return false;
 		}
 		PostMedia rendered = guarded("RECORD_UNAVAILABLE", () -> records.rendered(target.approval(), target.position()))
 				.orElseGet(() -> renderBeforeDeadline(target, plan, slide, deadline));
@@ -76,12 +83,13 @@ class TemplateRendering implements PreparationMethod {
 			records.recordPublishMedia(revisionId, target.approval(), rendered.copiedTo(publicPath));
 			return null;
 		});
+		return true;
 	}
 
 	/** 描く前に残り時間を確かめる。足りなければ一時的な失敗（描けた分は記録済みなので、次の tick で続きから） */
 	private PostMedia renderBeforeDeadline(Target target, RenderPlan plan, RenderPlan.SlideRender slide, Instant deadline) {
 		if (!clock.instant().isBefore(deadline)) {
-			throw new RenderTemporaryFailureException("TIME_BUDGET", "tick の持ち時間が足りないので、次の定期処理で続きを描きます", null);
+			throw RenderTemporaryFailureException.timeBudget(false);
 		}
 		return renderAndRecord(target, plan, slide);
 	}

@@ -1,5 +1,7 @@
 import { Member } from "@/domain/member/Member";
 import { Tenant } from "@/domain/tenant/Tenant";
+import { forgetPreviewImages } from "@/lib/template/previewImages";
+import { forgetAllAutosaves } from "./autosaveScope";
 import { check, supabase, unwrap, unwrapOptional } from "./supabase";
 
 /** ログインの状態。許可リストに無い・無効化されたアカウントは forbidden（AC-001-01, 02） */
@@ -17,6 +19,8 @@ export async function signInWithGoogle(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  forgetAllAutosaves();
+  forgetPreviewImages();
   await supabase().auth.signOut();
 }
 

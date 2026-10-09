@@ -16,4 +16,14 @@ export class Tenant {
   uploadPathFor(fileId: string): string {
     return `${this.id}/posts/${fileId}.jpg`;
   }
+
+  /** 背景写真の保存先（uploads-private/{団体ID}/backgrounds/…。JPEG。管理者だけが書ける） */
+  backgroundPathFor(fileId: string): string {
+    return `${this.id}/backgrounds/${fileId}.jpg`;
+  }
+
+  /** 投稿の型の設定のロゴの保存先（uploads-private/{団体ID}/style/…。PNG。管理者だけが書ける） */
+  logoPathFor(fileId: string): string {
+    return `${this.id}/style/${fileId}.png`;
+  }
 }

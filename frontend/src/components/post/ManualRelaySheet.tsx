@@ -62,7 +62,7 @@ export function ManualRelaySheet({ ideaId, ideaText, revision, onImported, onClo
         <span />
       </header>
       <GroupedSection title="① プロンプトをコピーして、外部のAIに貼る" footer="外部のAIには、団体の個人情報や入稿者の連絡先を貼らないでください">
-        <textarea aria-label="プロンプト" readOnly rows={6} value={prompt?.text ?? ""} className="block w-full resize-y bg-transparent px-4 py-3 text-[15px] outline-none" />
+        <textarea aria-label="プロンプト" readOnly rows={6} value={prompt?.text ?? ""} placeholder="プロンプトを用意しています…" className="block w-full resize-y bg-transparent px-4 py-3 text-[15px] outline-none" />
         <div className="border-t border-separator p-2">
           <Button variant="tinted" block disabled={!prompt} onClick={copy}>{copied ? "コピーしました" : "プロンプトをコピー"}</Button>
         </div>

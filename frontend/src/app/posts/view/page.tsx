@@ -9,6 +9,7 @@ import { SlidePreview } from "@/components/post/SlidePreview";
 import { StatusBadge } from "@/components/post/StatusBadge";
 import { useSession } from "@/components/session/SessionGate";
 import { Cell, GroupedSection, LargeTitle, Placeholder, ValueCell } from "@/components/ui/Grouped";
+import { PastPostCover } from "@/domain/post/PastPostCover";
 import type { Post } from "@/domain/post/Post";
 import type { PostEvent } from "@/domain/post/PostEvent";
 import { findPost, postHistory } from "@/lib/api/postRepository";
@@ -41,7 +42,7 @@ function PostView() {
     <article>
       {post.content.template
         ? <SlidePreview slides={post.content.template.slides} settings={post.content.template.settings}
-            templateVersion={post.content.template.templateVersion} closingNote="過去の投稿は承認した時点の新しい2件が入ります" />
+            templateVersion={post.content.template.templateVersion} closingNote={`過去の投稿は承認した時点の新しい${PastPostCover.MAX_COUNT}件が入ります`} />
         : <MediaPreview media={post.content.media} />}
       <StatusSection post={post} />
       <GroupedSection title="キャプション（公開される文面）">

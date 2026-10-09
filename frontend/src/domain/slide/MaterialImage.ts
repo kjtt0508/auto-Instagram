@@ -2,20 +2,22 @@ import type { GeneratedImage } from "../post/GeneratedImage";
 
 /**
  * 素材画像: 中のスライドのカードに載せる画像。生成画像（候補を採用したもの）か、人が差し替えた画像のどちらか一方。
- * 人が差し替えた画像は生成画像ではない（AI生成の表示は付かない。REQ-002 BR-002-20）。Java の MaterialImage と揃える
+ * 人が差し替えた画像は生成画像ではない（AI生成の表示は付かない。REQ-002 BR-002-20）。保存先・幅・高さ・容量を持つ（投稿画像と同じ）。
+ * Java の MaterialImage と揃える
  */
 export class MaterialImage {
   private constructor(
     readonly storagePath: string,
     private readonly size: { width: number; height: number },
+    readonly byteSize: number,
     private readonly generated: GeneratedImage | undefined,
   ) {}
 
   /** generated を渡すと生成画像、渡さなければ人が差し替えた画像 */
-  static of(parts: { storagePath: string; width: number; height: number; generated?: GeneratedImage }): MaterialImage {
+  static of(parts: { storagePath: string; width: number; height: number; byteSize: number; generated?: GeneratedImage }): MaterialImage {
     if (parts.storagePath.trim() === "") throw new Error("保存先は必須です");
-    if (!(parts.width > 0 && parts.height > 0)) throw new Error("幅・高さは正の数です");
-    return new MaterialImage(parts.storagePath, { width: parts.width, height: parts.height }, parts.generated);
+    if (!(parts.width > 0 && parts.height > 0 && parts.byteSize > 0)) throw new Error("幅・高さ・容量は正の数です");
+    return new MaterialImage(parts.storagePath, { width: parts.width, height: parts.height }, parts.byteSize, parts.generated);
   }
 
   /** 生成画像の由来（人が差し替えた画像なら undefined）。端末への一時保存が使う */
@@ -43,7 +45,7 @@ export class MaterialImage {
 
   /** 保存（RPC save_post_revision）に渡す形。生成画像なら候補の参照を付ける（素材画像としての採用） */
   toStoredForm() {
-    const stored = { storagePath: this.storagePath, width: this.size.width, height: this.size.height };
+    const stored = { storagePath: this.storagePath, width: this.size.width, height: this.size.height, byteSize: this.byteSize };
     if (!this.generated) return stored;
     return { ...stored, generation: { generationId: this.generated.generationId, candidatePosition: this.generated.candidatePosition } };
   }

@@ -79,10 +79,10 @@ public class JdbcJobRepository implements JobRepository {
 					""", claimed.attemptId(), OUTCOME.get(next.status()), outcome.errorKind(), outcome.errorDetail(),
 					outcome.inAttemptRetries());
 			jdbc.update("""
-					update jobs set status = ?, locked_until = null,
+					update jobs set status = ?, locked_until = null, max_attempts = ?,
 					       run_at = case when ? = 'PENDING' then ? else run_at end
 					 where id = ? and status = 'RUNNING'
-					""", next.status().name(), next.status().name(), Timestamp.from(runAgainAt), claimed.job().id());
+					""", next.status().name(), next.maxAttempts(), next.status().name(), Timestamp.from(runAgainAt), claimed.job().id());
 		});
 	}
 

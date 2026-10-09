@@ -39,7 +39,7 @@ final class SlideSamples {
 
 	static MaterialImage material(ImageStyle style) {
 		Optional<GeneratedImage> generated = Optional.ofNullable(style).map(s -> new GeneratedImage(UUID.randomUUID(), 1, s));
-		return new MaterialImage("t/materials/1.jpg", 800, 600, generated);
+		return new MaterialImage("t/materials/1.jpg", 800, 600, 120_000L, generated);
 	}
 
 	/** 表紙1 → 中のスライド bodies.size() 枚 → 最後のスライド1 */

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import caption from "../../../../docs/model/fixtures/caption.json";
 import { CaptionFooter } from "./CaptionFooter";
 import { FailureKind } from "./FailureKind";
 import { FixedHashtags } from "./FixedHashtags";
 import { PostStyleSettings } from "./PostStyleSettings";
 
 const fixed = FixedHashtags.of(["#同志社大学", "#同志社"]);
+
+describe("固定ハッシュタグ（fixtures/caption.json の hashtagMerges）", () => {
+  it.each(caption.hashtagMerges)("$id $name", (c) => {
+    expect(FixedHashtags.of(c.fixed).mergedWith(c.additional)).toEqual(c.merged);
+  });
+});
 
 describe("固定ハッシュタグ", () => {
   it("AC-002-17 追加のハッシュタグと合わせ、固定が先・重複は1つ", () => {

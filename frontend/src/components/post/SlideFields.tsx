@@ -10,6 +10,7 @@ import type { BodyContent } from "@/domain/slide/BodyContent";
 import type { CoverContent } from "@/domain/slide/CoverContent";
 import { CoverText } from "@/domain/slide/CoverText";
 import { PictureBrief } from "@/domain/slide/PictureBrief";
+import { SlideList } from "@/domain/slide/SlideList";
 import { SlideText } from "@/domain/slide/SlideText";
 import { viewUrls } from "@/lib/api/mediaStorage";
 import type { BackgroundPhoto } from "@/lib/api/styleRepository";
@@ -176,7 +177,7 @@ export function BodyFields({ body, bodyNumber, facts, canRemove, busy, onChange,
       <MaterialField body={body} busy={busy} onMakePicture={onMakePicture} onReplaceImage={onReplaceImage} onRemoveImage={onRemoveImage} />
       <div className="border-t border-separator p-2">
         <Button variant="destructive" block disabled={!canRemove} onClick={onRemove}>このスライドを削除</Button>
-        {!canRemove && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは1枚以上必要です</p>}
+        {!canRemove && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは{SlideList.BODY_MIN}枚以上必要です</p>}
       </div>
     </GroupedSection>
   );

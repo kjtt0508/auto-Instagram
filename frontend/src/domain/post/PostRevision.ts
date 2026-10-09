@@ -74,6 +74,14 @@ export class PostRevision {
    * 本文で既に出した文字数・ハッシュタグ数の違反は、公開用キャプションからは重ねて出さない（投稿画像の仕様は Post が見る）
    */
   violationsForApproval(prLabel: string): string[] {
+    return this.violationsForSaving(prLabel);
+  }
+
+  /**
+   * 保存できない理由のすべて。人の書き換えにも AI の出力と同じ検査をかけ、満たさなければ保存できない（BR-002-18）。
+   * 承認を依頼できない理由と同じ条件（承認の依頼の前の検査は画面側で行う。TS だけ。設計 2章）
+   */
+  violationsForSaving(prLabel: string): string[] {
     const body = Caption.violationsOf(this.caption.text);
     const published = PublishCaption.restore(this.parts(prLabel));
     const lengthOver = this.caption.length() > Caption.MAX_LENGTH;

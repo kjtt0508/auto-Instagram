@@ -5,18 +5,7 @@ package jp.co.keai.niijimaig.post.domain;
  * 並びは 表紙 → 中のスライド → 最後のスライド。TS の SlideRole と揃える
  */
 public enum SlideRole {
-	COVER("cover"),
-	BODY("body"),
-	CLOSING("closing");
-
-	private final String templateName;
-
-	SlideRole(String templateName) {
-		this.templateName = templateName;
-	}
-
-	/** 使うテンプレートの名前（テンプレートの版の中の、役割ごとの描き方） */
-	public String templateName() {
-		return templateName;
-	}
+	COVER,
+	BODY,
+	CLOSING
 }

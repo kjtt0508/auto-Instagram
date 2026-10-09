@@ -18,6 +18,11 @@ export class PromptVersion {
     return new PromptVersion(parts.id, parts.purpose, parts.versionNo, parts.body);
   }
 
+  /** 本文（新しい版の元にするため、画面に出す） */
+  bodyText(): string {
+    return this.body;
+  }
+
   /**
    * 入力の値を差し込んだプロンプト。置き換えは1回の走査で行い、差し込んだ値の中の `{{…}}` は置き換えない
    * （ネタの本文に `{{instruction}}` と書かれていても、別の値にならない）。入力に無い名前はそのまま残す

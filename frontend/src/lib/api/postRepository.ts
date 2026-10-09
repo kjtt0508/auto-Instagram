@@ -76,8 +76,6 @@ export type TemplateContent = {
   slides: SlideList; templateVersion: string; settings: PostStyleSettings; additionalHashtags: string[];
   /** 元になった下書き案の生成（無ければ null）。修正指示の親になる */
   generationId: string | null;
-  /** 素材画像の保存先 → 容量（保存し直すときに RPC へ渡す） */
-  materialBytes: Record<string, number>;
 };
 
 type SlideRow = { id: string; position: number; role: string };
@@ -125,7 +123,6 @@ export async function findTemplateContent(revisionId: string): Promise<TemplateC
   return {
     slides: SlideList.restore(slides), templateVersion: release.template_version, settings,
     additionalHashtags: tagRows.map((t) => t.hashtag), generationId: unwrapOptional(generation)?.generation_id ?? null,
-    materialBytes: Object.fromEntries(materials.map((m) => [m.storage_path, m.byte_size])),
   };
 }
 
@@ -154,7 +151,7 @@ function bodyOf(slide: SlideRow, rows: {
     text: SlideText.restore({ heading: body.heading, description: body.description, emphases: words }),
     brief: PictureBrief.restore({ prompt: body.picture_prompt, replacementNeeded: body.needs_replacement }),
     material: material ? MaterialImage.of({ storagePath: material.storage_path, width: material.width, height: material.height,
-      generated: origin ? GeneratedImage.of({ generationId: origin.generation_id, candidatePosition: origin.candidate_position, styleCode: origin.style }) : undefined }) : undefined,
+      byteSize: material.byte_size, generated: origin ? GeneratedImage.of({ generationId: origin.generation_id, candidatePosition: origin.candidate_position, styleCode: origin.style }) : undefined }) : undefined,
   });
 }
 

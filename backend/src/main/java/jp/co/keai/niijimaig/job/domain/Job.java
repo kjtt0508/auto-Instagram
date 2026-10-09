@@ -36,6 +36,14 @@ public final class Job {
 		return withStatus(JobStatus.PENDING);
 	}
 
+	/**
+	 * 仕事は進んだが、持ち時間の都合で続きを次の定期処理に回す。この試行は回数に数えない
+	 * （claim で数えた1回ぶん、上限を増やして待機に戻す。進んだ試行を数えると、数枚ずつしか進められない仕事が途中で失敗になる）
+	 */
+	public Job deferred() {
+		return new Job(id, type, status.transitTo(JobStatus.PENDING), attempts.extended());
+	}
+
 	/** 再試行しても結果が変わらない失敗（連携切れ・内容の不備など） */
 	public Job failedFinally() {
 		return withStatus(JobStatus.FAILED);
@@ -52,6 +60,11 @@ public final class Job {
 
 	public boolean willRetry() {
 		return status == JobStatus.PENDING;
+	}
+
+	/** 試行回数の上限（持ち越した試行は数えないぶん、上限が増える） */
+	public int maxAttempts() {
+		return attempts.max();
 	}
 
 	public UUID id() {
@@ -80,6 +93,10 @@ public final class Job {
 
 		boolean exhausted() {
 			return done >= max;
+		}
+
+		Attempts extended() {
+			return new Attempts(done, max + 1);
 		}
 	}
 }

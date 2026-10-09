@@ -6,7 +6,7 @@ import { PostEditor } from "@/components/post/PostEditor";
 import { Placeholder } from "@/components/ui/Grouped";
 import type { Post } from "@/domain/post/Post";
 import { TemplatePostEditor } from "@/components/post/TemplatePostEditor";
-import { EMPTY_TEMPLATE_WORK } from "@/lib/api/templateDraftAutosave";
+import { EMPTY_TEMPLATE_WORK } from "@/lib/template/templateWork";
 import { findPost, findTemplateContent, type TemplateContent } from "@/lib/api/postRepository";
 
 /** AIで作った投稿の編集（スライド・キャプションを直して保存し直す）。元の生成を覚えているので、修正指示も使える */
@@ -19,7 +19,7 @@ function TemplateEdit({ post }: { post: Post }) {
   if (error) return <Placeholder tone="error">{error}</Placeholder>;
   if (!content) return <Placeholder>読み込み中…</Placeholder>;
   return <TemplatePostEditor postId={post.id} title="投稿を編集" initial={{
-    ...EMPTY_TEMPLATE_WORK, slides: content.slides, generationId: content.generationId, materialBytes: content.materialBytes,
+    ...EMPTY_TEMPLATE_WORK, slides: content.slides, generationId: content.generationId,
     captionText: post.content.caption.text, hashtagText: content.additionalHashtags.join(" "), prCategory: post.content.prCategory,
   }} />;
 }

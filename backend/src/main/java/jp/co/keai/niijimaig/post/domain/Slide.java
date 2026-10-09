@@ -53,11 +53,10 @@ public record Slide(Content content) {
 		return content.needsApprovalCheck();
 	}
 
-	/** 画像化でテンプレートに渡す値（役割とテンプレートの名前を添える） */
+	/** 画像化でテンプレートに渡す値（役割を添える。TS の Slide.renderValues と同じ形。docs/model/fixtures/render-values.json） */
 	public Map<String, Object> renderValues() {
 		Map<String, Object> values = new LinkedHashMap<>();
 		values.put("role", role().name());
-		values.put("template", role().templateName());
 		values.putAll(content.renderValues());
 		return values;
 	}

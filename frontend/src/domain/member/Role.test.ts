@@ -21,6 +21,10 @@ describe("ロール（BR-001-01）", () => {
   it("Instagram連携を扱えるのは管理者だけ", () => {
     expect(Role.all().filter((r) => r.canManageConnection())).toEqual([Role.ADMIN]);
   });
+
+  it("BR-002-21 背景写真・投稿の型の設定・プロンプト版を管理できるのは管理者だけ", () => {
+    expect(Role.all().filter((r) => r.canManageGeneration())).toEqual([Role.ADMIN]);
+  });
 });
 
 describe("メンバー", () => {

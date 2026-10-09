@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SAMPLE_TEMPLATE_VERSION, sampleBody, sampleCoverText, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
 import { ClosingContent } from "../slide/ClosingContent";
 import { CoverContent } from "../slide/CoverContent";
+import { CoverText } from "../slide/CoverText";
 import { Slide } from "../slide/Slide";
 import { SlideList } from "../slide/SlideList";
 import { AiDisclosure } from "./AiDisclosure";
@@ -91,6 +92,18 @@ describe("投稿の版（テンプレートの投稿）", () => {
     expect(revisionOf(2115).violationsForApproval(PR_LABEL))
       .toEqual(["キャプションの定型とハッシュタグを含めて2,200文字以内にしてください（2,201文字）"]);
     expect(revisionOf(2201).violationsForApproval(PR_LABEL)).toEqual(["キャプションは2,200文字以内です（2,201文字）"]);
+  });
+
+  it("AC-002-22 キーワードを13文字に書き換えた版は、保存できず理由が出る（文言の違反とキャプションの文字数の両方を見る）", () => {
+    const cover = CoverContent.of(CoverText.restore({ target: "同志社大学", keyword: "あ".repeat(13), annotation: "", closingWords: "まとめたよ", accentCode: "PURPLE" }));
+    const slides = SlideList.of([Slide.createCover(cover), Slide.createBody(sampleBody()), Slide.createClosing(ClosingContent.empty())]);
+    const revision = PostRevision.ofSlides({ caption: Caption.restore("あ".repeat(2115)), prCategory: PrCategory.NONE, slides,
+      templateVersion: SAMPLE_TEMPLATE_VERSION, settings: sampleSettings(), additionalHashtags: [] });
+    expect(revision.violationsForSaving(PR_LABEL)).toEqual([
+      "表紙: キーワードは1〜12文字にしてください（13文字）",
+      "キャプションの定型とハッシュタグを含めて2,200文字以内にしてください（2,201文字）",
+    ]);
+    expect(templateRevision().violationsForSaving(PR_LABEL)).toEqual([]);
   });
 
   it("下書き案の文言の取り込みはテンプレートの投稿だけ", () => {

@@ -97,7 +97,7 @@ class TemplateCaptionTest {
 		assertThat(plan.settings()).containsEntry("bandText", "テスト帯");
 		assertThat(plan.slides()).extracting(RevisionContent.RenderPlan.SlideRender::imageRefs).containsExactly(
 				List.of("t/backgrounds/1.jpg"), List.of("t/materials/1.jpg"), List.of("t/posts/p2/1.jpg"));
-		assertThat(plan.slides().get(1).values()).containsEntry("template", "body");
+		assertThat(plan.slides().get(1).values()).containsEntry("role", "BODY");
 		PostRevision photos = PostRevision.ofPhotos(new Caption("本文"), PrCategory.NONE, new PostMediaList(List.of()));
 		assertThat(photos.renderPlan(List.of())).isEmpty();
 	}
@@ -251,6 +251,22 @@ class TemplateCaptionTest {
 		assertThat(fixed.mergedWith(List.of("#学割", "#同志社", "＃同志社大学", "#京都"))).containsExactly("#同志社大学", "#同志社", "#学割", "#京都");
 		assertThatThrownBy(() -> new FixedHashtags(List.of("同志社"))).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> new CaptionFooter(" ")).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	static Stream<JsonNode> hashtagMerges() { return SharedFixtureCasesTest.cases("caption.json", "hashtagMerges"); }
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("hashtagMerges")
+	@DisplayName("AC-002-17 固定ハッシュタグと追加分の並び（形が正しくない追加分は並べない。画面と同じ共通テストケース）")
+	void hashtagMerge(JsonNode c) {
+		List<String> fixed = new ArrayList<>();
+		c.get("fixed").forEach(n -> fixed.add(n.asString()));
+		List<String> additional = new ArrayList<>();
+		c.get("additional").forEach(n -> additional.add(n.asString()));
+		List<String> merged = new ArrayList<>();
+		c.get("merged").forEach(n -> merged.add(n.asString()));
+
+		assertThat(new FixedHashtags(fixed).mergedWith(additional)).containsExactlyElementsOf(merged);
 	}
 
 	private static PostRevision revision(BodyContent body) {
