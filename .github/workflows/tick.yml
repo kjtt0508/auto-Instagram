@@ -47,10 +47,13 @@ jobs:
       - id: playwright_install
         if: steps.playwright.outputs.cache-hit != 'true'
         continue-on-error: true
+        timeout-minutes: 3
         run: npx -y playwright@${{ steps.playwright_version.outputs.version }} install --with-deps chromium
-      # キャッシュが当たったときも、OS のライブラリ（ブラウザ本体以外）は毎回の実行環境に必要。失敗しても公開は止めない。
+      # キャッシュが当たったときも、OS のライブラリ（ブラウザ本体以外）は毎回の実行環境に必要。
+      # 失敗・固まりでも公開は止めない（手順ごとに 3 分で打ち切り、java -jar の持ち時間を残す）。
       - if: steps.playwright.outputs.cache-hit == 'true'
         continue-on-error: true
+        timeout-minutes: 3
         run: npx -y playwright@${{ steps.playwright_version.outputs.version }} install-deps chromium
       - if: steps.playwright.outputs.cache-hit != 'true' && steps.playwright_install.outcome == 'success'
         uses: actions/cache/save@v4

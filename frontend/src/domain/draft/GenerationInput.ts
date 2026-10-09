@@ -52,6 +52,15 @@ export class GenerationInput {
     ].join("、");
   }
 
+  /**
+   * 差し込む値（ネタ・現在の下書き・修正指示）の中の区切り文字を無害にする。
+   * 初版プロンプトは「=====…ここから/ここまで=====」で値を囲むので、`=` が3つ以上続く並びを全角の `＝` に置き換え、
+   * 値の中から囲みを閉じたり偽の囲みを作ったりできなくする。記録（toJson）は元の値のまま
+   */
+  private static harmless(value: string): string {
+    return value.replace(/={3,}/gu, (run) => "＝".repeat(run.length));
+  }
+
   /** 中のスライドの枚数を固定する修正か */
   bodySlideCount(): number | undefined {
     return this.revision?.bodySlideCount;
@@ -61,14 +70,14 @@ export class GenerationInput {
   placeholders(): Record<string, string> {
     const common = {
       today: this.today,
-      ideaText: this.ideaText,
+      ideaText: GenerationInput.harmless(this.ideaText),
       coverTargets: this.coverTargets.join("、"),
       accentColors: AccentColor.all().map((c) => `${c.code}（${c.label}）`).join("、"),
       limits: GenerationInput.limitsText(),
     };
     if (this.revision) {
-      return { ...common, currentDraft: JSON.stringify(this.revision.currentDraft, null, 2), instruction: this.revision.instruction.text,
-        bodySlideCount: String(this.revision.bodySlideCount) };
+      return { ...common, currentDraft: GenerationInput.harmless(JSON.stringify(this.revision.currentDraft, null, 2)),
+        instruction: GenerationInput.harmless(this.revision.instruction.text), bodySlideCount: String(this.revision.bodySlideCount) };
     }
     const photos = this.backgroundPhotos ?? [];
     return { ...common, backgroundPhotos: photos.length === 0 ? "なし" : photos.map((p) => `${p.id}: ${p.description}`).join("\n") };

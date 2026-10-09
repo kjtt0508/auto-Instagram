@@ -1,0 +1,17 @@
+{
+  "$comment": "プロンプトの差し込み値の名前（ADR-0005）。用途ごとに、必須（本文に全部必要）と許される（これ以外は本文に入れられない）を持つ。TS の PromptPurpose.placeholderNames()・GenerationInput.placeholders() と、DB の app.require_prompt_placeholders を一致させる。CAPTION は REQ-003 で決めるまで、必須なし・知っている差し込み値は全部許す（TS では undefined）",
+  "purposes": {
+    "PLAN": {
+      "required": ["today", "ideaText", "coverTargets", "accentColors", "limits", "backgroundPhotos"],
+      "allowed": ["today", "ideaText", "coverTargets", "accentColors", "limits", "backgroundPhotos"]
+    },
+    "REVISE": {
+      "required": ["today", "ideaText", "coverTargets", "accentColors", "limits", "currentDraft", "instruction", "bodySlideCount"],
+      "allowed": ["today", "ideaText", "coverTargets", "accentColors", "limits", "currentDraft", "instruction", "bodySlideCount"]
+    },
+    "CAPTION": {
+      "required": [],
+      "allowed": ["today", "ideaText", "coverTargets", "accentColors", "backgroundPhotos", "limits", "currentDraft", "instruction", "bodySlideCount"]
+    }
+  }
+}

@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.database;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,8 @@ import org.springframework.test.context.ActiveProfiles;
 
 import jp.co.keai.niijimaig.TestcontainersConfiguration;
 import jp.co.keai.niijimaig.support.SupabaseFixture.LoggedIn;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /** プロンプト版・生成の記録・LLM 利用回数・RLS を DB で確かめる（REQ-002 設計 1・5章、V10） */
 @Import(TestcontainersConfiguration.class)
@@ -109,6 +112,43 @@ class PromptAndGenerationDatabaseTest extends DraftDatabaseSupport {
 		assertRejected(() -> db.as(admin, j -> j.queryForObject("select public.create_prompt_version('PLAN', '')", UUID.class)), "22023", "本文");
 		assertRejected(() -> db.as(outsider, j -> j.queryForList("select public.activate_prompt_version(?)", version)), "P0404", "見つかりません");
 		assertThat(db.<List<Map<String, Object>>>as(outsider, j -> j.queryForList("select 1 from prompt_versions where id = ?", version))).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-002-03 差し込み値の検査は共通テストケース（fixtures/prompt-placeholders.json）と一致する（必須が欠ければ拒否・許されない名前は拒否・許される名前は通る）")
+	void placeholderRulesMatchFixture() {
+		JsonNode purposes = JsonMapper.builder().build().readTree(Path.of("../docs/model/fixtures/prompt-placeholders.json").toFile()).get("purposes");
+		for (String purpose : List.of("PLAN", "REVISE", "CAPTION")) {
+			List<String> required = names(purposes.get(purpose).get("required"));
+			List<String> allowed = names(purposes.get(purpose).get("allowed"));
+			String check = "select app.require_prompt_placeholders(?, ?)";
+
+			jdbc.queryForList(check, purpose, body(required));
+			for (String name : allowed) {
+				jdbc.queryForList(check, purpose, body(required) + body(List.of(name)));
+			}
+			for (String name : required) {
+				List<String> without = new ArrayList<>(required);
+				without.remove(name);
+				assertRejected(() -> jdbc.queryForList(check, purpose, body(without)), "22023", "{{" + name + "}}");
+			}
+			assertRejected(() -> jdbc.queryForList(check, purpose, body(required) + "{{notAllowedName}}"), "22023", "{{notAllowedName}}");
+			for (String name : List.of("today", "ideaText", "coverTargets", "accentColors", "backgroundPhotos", "limits", "currentDraft", "instruction", "bodySlideCount")) {
+				if (!allowed.contains(name)) {
+					assertRejected(() -> jdbc.queryForList(check, purpose, body(required) + "{{" + name + "}}"), "22023", "{{" + name + "}}");
+				}
+			}
+		}
+	}
+
+	private static List<String> names(JsonNode array) {
+		List<String> result = new ArrayList<>();
+		array.forEach(n -> result.add(n.asString()));
+		return result;
+	}
+
+	private static String body(List<String> names) {
+		return names.stream().map(n -> "{{" + n + "}}").collect(java.util.stream.Collectors.joining(" "));
 	}
 
 	@Test

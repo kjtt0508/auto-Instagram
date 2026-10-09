@@ -88,7 +88,7 @@ test("S-03 冒頭の2択で「AIで作る」を選ぶと S-07 に切り替わり
   await expect(page.getByLabel("写真を選ぶ")).toHaveCount(0);
 });
 
-test("AC-002-01 AC-002-06 生成 → 編集 → 保存。<script> を含む見出しはプレビューで文字として出て、保存の JSON は設計4章の形になる", async ({ page }) => {
+test("AC-002-01 生成 → 編集 → 保存。<script> を含む見出しはプレビューで文字として出て、保存の JSON は設計4章の形になる", async ({ page }) => {
   const dialogs: string[] = [];
   page.on("dialog", (d) => { dialogs.push(d.message()); void d.dismiss(); });
   const p = proposal([body({ heading: "<script>alert(1)" }), body({ heading: "映画が安い", emphases: [], needsReplacement: true })]);
