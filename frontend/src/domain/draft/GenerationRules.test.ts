@@ -4,6 +4,7 @@ import { GenerationRoute } from "./GenerationRoute";
 import { Idea } from "./Idea";
 import { LlmQuota } from "./LlmQuota";
 import { LlmUsage } from "./LlmUsage";
+import { PromptPurpose } from "./PromptPurpose";
 import { RevisionInstruction } from "./RevisionInstruction";
 
 describe("LLM利用回数の警告", () => {
@@ -22,9 +23,27 @@ describe("LLM利用回数の警告", () => {
 
 describe("再生成方針", () => {
   it("AC-002-04 違反があり、まだ作り直していなければ作り直してよい。作り直しは1回まで", () => {
-    expect(GenerationRetryPolicy.canRetry(["キーワードは1〜12文字にしてください（13文字）"], 0)).toBe(true);
-    expect(GenerationRetryPolicy.canRetry(["x"], 1)).toBe(false);
-    expect(GenerationRetryPolicy.canRetry([], 0)).toBe(false);
+    const enough = GenerationRetryPolicy.MIN_RETRY_REMAINING_MS;
+    expect(GenerationRetryPolicy.canRetry(["キーワードは1〜12文字にしてください（13文字）"], 0, enough)).toBe(true);
+    expect(GenerationRetryPolicy.canRetry(["x"], 1, enough)).toBe(false);
+    expect(GenerationRetryPolicy.canRetry([], 0, enough)).toBe(false);
+  });
+
+  it("AC-002-04 作り直しは残り20秒以上のときだけ（19,999ms は不可、20,000ms は可）", () => {
+    expect(GenerationRetryPolicy.canRetry(["x"], 0, 19_999)).toBe(false);
+    expect(GenerationRetryPolicy.canRetry(["x"], 0, 20_000)).toBe(true);
+  });
+
+  it("AC-002-04 制限時間は60秒。残り時間は負にならない", () => {
+    expect(GenerationRetryPolicy.remainingMs(0)).toBe(60_000);
+    expect(GenerationRetryPolicy.remainingMs(40_000)).toBe(20_000);
+    expect(GenerationRetryPolicy.remainingMs(70_000)).toBe(0);
+  });
+
+  it("AC-002-04 プロンプト用途が、背景写真を選ぶ・現在の下書きの特徴を保つ・手動で取り込める用途を決める", () => {
+    expect(PromptPurpose.all().filter((p) => p.choosesBackgroundPhoto())).toEqual([PromptPurpose.PLAN]);
+    expect(PromptPurpose.all().filter((p) => p.keepsCurrentDraftTraits())).toEqual([PromptPurpose.REVISE]);
+    expect(PromptPurpose.all().filter((p) => p.acceptsManualImport())).toEqual([PromptPurpose.PLAN, PromptPurpose.REVISE]);
   });
 
   it("作り直しのときの説明は、違反を1行ずつ並べる", () => {

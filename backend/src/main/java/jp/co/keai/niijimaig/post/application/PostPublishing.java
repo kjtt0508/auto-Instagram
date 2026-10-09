@@ -95,7 +95,7 @@ public class PostPublishing {
 				failBeforeStart(FailureReason.of(FailureKind.TOKEN_INVALID));
 				return;
 			}
-			PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId());
+			PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId(), post.preparation());
 			if (!post.isPreparedWith(prepared)) {
 				waitForMedia();
 				return;
@@ -117,7 +117,7 @@ public class PostPublishing {
 				apply(post, PublicationResult.failed(FailureReason.of(FailureKind.TOKEN_INVALID)));
 				return;
 			}
-			PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId());
+			PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId(), post.preparation());
 			apply(post, publication().recover(target(post, connection.get(), prepared)));
 		}
 

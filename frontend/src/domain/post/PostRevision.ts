@@ -64,6 +64,11 @@ export class PostRevision {
     return PublishCaption.of(this.parts(prLabel));
   }
 
+  /** 入力中の表示用の公開用キャプション（上限を超えていても組み立てる。理由は violations() で見る） */
+  previewCaption(prLabel: string): PublishCaption {
+    return PublishCaption.restore(this.parts(prLabel));
+  }
+
   /**
    * 承認を依頼できない理由のすべて（中身のスライド構成・追加のハッシュタグ、キャプション本文、付記・定型・ハッシュタグ込みの上限）。
    * 本文で既に出した文字数・ハッシュタグ数の違反は、公開用キャプションからは重ねて出さない（投稿画像の仕様は Post が見る）

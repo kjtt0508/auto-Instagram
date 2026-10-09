@@ -45,6 +45,7 @@ const templateContent = (parts: {
   },
   violations: () => [
     ...parts.slides.violations(),
+    ...parts.slides.textViolations(parts.settings),
     ...parts.settings.fixedHashtags().violationsOfAdditional(parts.additionalHashtags),
   ],
   /** 文言（スライドの文言・追加のハッシュタグ）を取り込む。素材画像・背景写真・テンプレートの版・設定の版は保つ */

@@ -27,6 +27,11 @@ describe("スライドの文言（fixtures/slide-text.json）", () => {
     expect(text.segments().filter((s) => s.emphasized).map((s) => s.text)).toEqual(["学割", "京都"]);
   });
 
+  it("AC-002-12 強調する語の位置と長さはコードポイントで返る（絵文字は1文字、同じ語は重ならない最初の位置）", () => {
+    const text = SlideText.of(partsOf({ description: "😀京都と😀京都を楽しむ", emphases: ["京都", "京都", "楽しむ"] }));
+    expect(text.emphasisRanges()).toEqual([{ start: 1, length: 2 }, { start: 5, length: 2 }, { start: 8, length: 3 }]);
+  });
+
   it("AC-002-22 人が説明文を121文字に書き換えると保存できず、理由が出る", () => {
     const parts = partsOf({ description: "あ".repeat(121), emphases: [] });
     expect(SlideText.violationsOf(parts)).toEqual(["説明文は1〜120文字にしてください（121文字）"]);

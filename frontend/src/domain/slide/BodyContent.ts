@@ -32,6 +32,20 @@ export class BodyContent {
     return new BodyContent(text, brief, this.material);
   }
 
+  /** 保存（RPC save_post_revision）に渡す中のスライドの形。強調する語は説明文の中の位置（コードポイント）にして渡す */
+  toStoredForm() {
+    return {
+      role: "BODY" as const, heading: this.text.heading, description: this.text.description,
+      emphases: this.text.emphasisRanges(), picturePrompt: this.brief.promptText(), needsReplacement: this.brief.needsReplacement(),
+      ...(this.material ? { material: this.material.toStoredForm() } : {}),
+    };
+  }
+
+  /** テンプレートの描画値（中のスライド。強調する部分は区切りにして渡す） */
+  renderValues() {
+    return { role: "BODY" as const, heading: this.text.heading, segments: this.text.segments(), material: this.material?.storagePath };
+  }
+
   imageRefs(): readonly string[] {
     return this.material ? [this.material.storagePath] : [];
   }

@@ -4,7 +4,8 @@ import type { PromptPurpose } from "../../../src/domain/draft/PromptPurpose";
 import type { PromptVersion } from "../../../src/domain/draft/PromptVersion";
 import type { PostStyleSettings } from "../../../src/domain/post/PostStyleSettings";
 import {
-  DraftRefusal, type BackgroundCandidate, type DraftRecords, type DraftSettings, type RequestingMember, type StoredIdea,
+  DraftRefusal, type BackgroundCandidate, type DraftRecords, type DraftSettings, type RequestingMember, type StoredGeneration,
+  type StoredIdea,
 } from "./draftPorts";
 
 // 下書き案の生成と手動コピペで共通の部品
@@ -42,25 +43,38 @@ export async function requireMember(records: DraftRecords, accessToken: string):
 }
 
 /** 読み込むだけで何も記録しない（投稿の型の設定が無ければ、ここで 409 にして記録も LLM 呼び出しもしない） */
-export async function loadContext(records: DraftRecords, member: RequestingMember, purpose: PromptPurpose, withPhotos: boolean): Promise<DraftContext> {
+export async function loadContext(records: DraftRecords, member: RequestingMember, purpose: PromptPurpose): Promise<DraftContext> {
   const style = await records.styleOf(member.tenantId);
   if (!style) throw new DraftRefusal("STYLE_NOT_CONFIGURED", "投稿の型の設定がありません。管理者に設定を依頼してください");
   const [settings, photos, prompt] = await Promise.all([
     records.settingsOf(member.tenantId),
-    withPhotos ? records.usableBackgroundPhotos(member.tenantId) : Promise.resolve([]),
+    // 背景写真を選ばせるのは用途が決める（PLAN だけ）。選ばせない用途では候補を読まない
+    purpose.choosesBackgroundPhoto() ? records.usableBackgroundPhotos(member.tenantId) : Promise.resolve([]),
     records.activePromptVersion(member.tenantId, purpose),
   ]);
   if (!prompt) throw new Error(`有効なプロンプト版がありません（${purpose.code}）`);
   return { style, settings, photos, prompt };
 }
 
-/** 既存のネタを使う。自団体のものだけ */
+/** 既存のネタを使う。自団体のものだけ（ほかの団体のものは、存在を知らせないよう「見つからない」と同じ 404） */
 export async function requireOwnIdea(records: DraftRecords, member: RequestingMember, ideaId: unknown): Promise<StoredIdea> {
-  if (!isUuid(ideaId)) throw new DraftRefusal("NOT_FOUND", "ネタが見つかりません");
-  const idea = await records.ideaOf(ideaId);
-  if (!idea) throw new DraftRefusal("NOT_FOUND", "ネタが見つかりません");
-  if (idea.tenantId !== member.tenantId) throw new DraftRefusal("FORBIDDEN", "ほかの団体のネタです");
+  const idea = isUuid(ideaId) ? await records.ideaOf(ideaId) : null;
+  if (!idea || idea.tenantId !== member.tenantId) throw new DraftRefusal("NOT_FOUND", "ネタが見つかりません");
   return idea;
+}
+
+/** 既存の生成を使う。自団体のものだけ（ほかの団体のものは 404） */
+export async function requireOwnGeneration(records: DraftRecords, member: RequestingMember, generationId: unknown): Promise<StoredGeneration> {
+  const generation = isUuid(generationId) ? await records.generationOf(generationId) : null;
+  if (!generation || generation.tenantId !== member.tenantId) throw new DraftRefusal("NOT_FOUND", "元の生成が見つかりません");
+  return generation;
+}
+
+/** 既存のプロンプト版を使う。自団体のものだけ（ほかの団体のものは 404） */
+export async function requireOwnPromptVersion(records: DraftRecords, member: RequestingMember, id: unknown): Promise<PromptVersion> {
+  const stored = isUuid(id) ? await records.promptVersionOf(id) : null;
+  if (!stored || stored.tenantId !== member.tenantId) throw new DraftRefusal("NOT_FOUND", "プロンプト版が見つかりません");
+  return stored.version;
 }
 
 /** 失敗の理由をログに残す（利用者には 502/503/504 としか見えないため）。例外の文言は状態コードだけで、鍵は含まれない */

@@ -11,7 +11,12 @@ export type MockPost = {
 export type MockWorld = {
   role: "ADMIN" | "APPROVER" | "EDITOR"; heartbeatMinutesAgo: number; posts: MockPost[];
   imageGenerationsUsed?: number; // 今日の画像生成の回数（上限20回・警告0.8）
+  styleSettings?: boolean; // 投稿の型の設定がある（REQ-002）
+  backgroundPhotos?: { id: string; path: string; description: string }[]; // 使っている背景写真（REQ-002）
 };
+
+/** 画像の代わりに返す 1×1 の PNG（署名付き URL の先） */
+const PIXEL_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 export const minutesFromNow = (minutes: number) => new Date(Date.now() + minutes * MINUTE_MS);
 
@@ -28,6 +33,7 @@ export async function useMockSupabase(page: Page, world: MockWorld): Promise<{ r
 
 function respond(route: Route, world: MockWorld, rpcCalls: string[]) {
   const url = new URL(route.request().url());
+  if (url.pathname.startsWith("/storage/v1/")) return storage(route, url);
   const path = url.pathname.replace("/rest/v1/", "");
   if (path.startsWith("rpc/")) {
     rpcCalls.push(path.slice(4));
@@ -42,7 +48,24 @@ function respond(route: Route, world: MockWorld, rpcCalls: string[]) {
   return json(route, wantsObject ? rows[0] ?? null : rows);
 }
 
+/** Storage: 署名付き URL の発行（パスごとに URL を返す）・その URL の画像・保存 */
+function storage(route: Route, url: URL) {
+  const request = route.request();
+  if (url.pathname.startsWith("/storage/v1/object/sign/uploads-private/") && request.method() === "GET") {
+    return route.fulfill({ status: 200, contentType: "image/png", body: PIXEL_PNG });
+  }
+  if (url.pathname === "/storage/v1/object/sign/uploads-private" && request.method() === "POST") {
+    const paths = (request.postDataJSON() as { paths: string[] }).paths;
+    return json(route, paths.map((p) => ({ path: p, signedURL: `/object/sign/uploads-private/${p}?token=e2e`, error: null })));
+  }
+  return json(route, { Key: "uploads-private/e2e" });
+}
+
 function tableRows(table: string, url: URL, world: MockWorld): unknown[] {
+  if (table === "post_style_settings_current") return world.styleSettings ? [STYLE_ROW] : [];
+  if (table === "usable_background_photos") {
+    return (world.backgroundPhotos ?? []).map((p) => ({ id: p.id, storage_path: p.path, description: p.description }));
+  }
   if (table === "member_current") {
     return [{ member_id: "m1", tenant_id: "t1", email: "approver@example.com", display_name: "承認者", role: world.role, active: true }];
   }
@@ -80,6 +103,12 @@ const toPostRow = (p: MockPost) => ({
   published_at: p.publishedAt?.toISOString() ?? null,
   last_failure_kind: p.failure?.kind ?? null, last_failure_message: p.failure?.message ?? null,
 });
+
+const STYLE_ROW = {
+  id: 1, tenant_id: "t1", version: 1, band_text: "新島info", cover_targets: ["同志社大学", "同志社大生"],
+  closing_message: "ご覧いただきありがとうございます", account_introduction: "@niijima_info\n学生生活を発信中",
+  caption_footer: "──────\n新島info", fixed_hashtags: ["#新島info", "#同志社"],
+};
 
 const connection = () => ({
   ig_username: "niijima_info", connected_at: minutesFromNow(-60 * 24).toISOString(),

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { formatDateTime } from "@/components/format";
 import { MediaPreview } from "@/components/post/MediaPreview";
 import { PostActions } from "@/components/post/PostActions";
+import { SlidePreview } from "@/components/post/SlidePreview";
 import { StatusBadge } from "@/components/post/StatusBadge";
 import { useSession } from "@/components/session/SessionGate";
 import { Cell, GroupedSection, LargeTitle, Placeholder, ValueCell } from "@/components/ui/Grouped";
@@ -38,7 +39,10 @@ function PostView() {
   const post = loaded.post;
   return (
     <article>
-      <MediaPreview media={post.content.media} />
+      {post.content.template
+        ? <SlidePreview slides={post.content.template.slides} settings={post.content.template.settings}
+            templateVersion={post.content.template.templateVersion} closingNote="過去の投稿は承認した時点の新しい2件が入ります" />
+        : <MediaPreview media={post.content.media} />}
       <StatusSection post={post} />
       <GroupedSection title="キャプション（公開される文面）">
         <Cell><p className="whitespace-pre-wrap break-words text-[15px]">{post.publishCaption(tenant.prLabel).text}</p></Cell>

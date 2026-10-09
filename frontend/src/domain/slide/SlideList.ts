@@ -1,5 +1,7 @@
 import type { DraftProposal } from "../draft/DraftProposal";
 import type { PastPostCover } from "../post/PastPostCover";
+import type { PostStyleSettings } from "../post/PostStyleSettings";
+import { PictureBrief } from "./PictureBrief";
 import { BodyContent } from "./BodyContent";
 import { ClosingContent } from "./ClosingContent";
 import { CoverContent } from "./CoverContent";
@@ -52,6 +54,23 @@ export class SlideList {
 
   violations(): string[] {
     return SlideList.violationsOf(this.slides.map((s) => s.role));
+  }
+
+  /**
+   * 文言（表紙の文言・中のスライドの文言と絵の指示）が満たさない条件。記録から戻した・人が書き換えた文言は作るときに検査しないので、
+   * 承認を依頼する前にここで確かめる。どのスライドかを頭に添える
+   */
+  textViolations(settings: PostStyleSettings): string[] {
+    let bodyNumber = 0;
+    return this.slides.flatMap((s) => {
+      const cover = s.coverContent();
+      if (cover) return cover.text.violations(settings).map((v) => `表紙: ${v}`);
+      const body = s.bodyContent();
+      if (!body) return [];
+      bodyNumber += 1;
+      return [...body.text.violations(), ...PictureBrief.violationsOf(body.brief.promptText()).map((v) => `絵の指示: ${v}`)]
+        .map((v) => `中のスライド${bodyNumber}枚目: ${v}`);
+    });
   }
 
   items(): readonly Slide[] {
@@ -110,6 +129,11 @@ export class SlideList {
   /** 画像化のとき、承認で選んだ過去の投稿の表紙を最後のスライドに載せた新しい構成 */
   withPastPosts(covers: readonly PastPostCover[]): SlideList {
     return SlideList.of([...this.slides.slice(0, -1), Slide.createClosing(ClosingContent.of(covers))]);
+  }
+
+  /** 保存（RPC save_post_revision の slides）に渡す形 */
+  toStoredForm() {
+    return this.slides.map((s) => s.toStoredForm());
   }
 
   imageRefs(): readonly string[] {

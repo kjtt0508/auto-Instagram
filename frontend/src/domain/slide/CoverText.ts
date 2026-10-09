@@ -22,13 +22,28 @@ export class CoverText {
 
   /** 満たさない条件（空なら受け付けられる）。アクセント色は区分のコードで受ける（AI の出力は文字列のため） */
   static violationsOf(parts: Parameters<typeof CoverText.restore>[0], settings: PostStyleSettings): string[] {
-    return [
-      ...(settings.acceptsCoverTarget(parts.target) ? [] : [CoverText.targetViolation(settings)]),
-      ...lengthViolations("キーワード", parts.keyword, 1, CoverText.KEYWORD_MAX),
-      ...lengthViolations("添え書き", parts.annotation, 0, CoverText.ANNOTATION_MAX),
-      ...lengthViolations("締めの言葉", parts.closingWords, 1, CoverText.CLOSING_WORDS_MAX),
-      ...(AccentColor.all().some((c) => c.code === parts.accentCode) ? [] : [CoverText.accentViolation()]),
-    ];
+    return Object.values(CoverText.violationsByField(parts, settings)).flat();
+  }
+
+  /** 満たさない条件を欄ごとに分けたもの（入力欄の下に出す。順番は violationsOf と同じ） */
+  static violationsByField(parts: Parameters<typeof CoverText.restore>[0], settings: PostStyleSettings) {
+    return {
+      target: settings.acceptsCoverTarget(parts.target) ? [] : [CoverText.targetViolation(settings)],
+      keyword: lengthViolations("キーワード", parts.keyword, 1, CoverText.KEYWORD_MAX),
+      annotation: lengthViolations("添え書き", parts.annotation, 0, CoverText.ANNOTATION_MAX),
+      closingWords: lengthViolations("締めの言葉", parts.closingWords, 1, CoverText.CLOSING_WORDS_MAX),
+      accent: AccentColor.all().some((c) => c.code === parts.accentCode) ? [] : [CoverText.accentViolation()],
+    };
+  }
+
+  /** この文言が満たさない条件を欄ごとに分けたもの（記録から戻した文言・人が書き換え中の文言を検査する） */
+  violationsByField(settings: PostStyleSettings) {
+    return CoverText.violationsByField({ ...this, accentCode: this.accent.code }, settings);
+  }
+
+  /** この文言が満たさない条件（空なら承認を依頼できる） */
+  violations(settings: PostStyleSettings): string[] {
+    return Object.values(this.violationsByField(settings)).flat();
   }
 
   /** 検査して作る。満たさなければ例外（人の入力を保存するとき） */

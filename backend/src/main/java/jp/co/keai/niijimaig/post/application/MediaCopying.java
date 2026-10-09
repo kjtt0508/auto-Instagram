@@ -1,5 +1,7 @@
 package jp.co.keai.niijimaig.post.application;
 
+import java.time.Instant;
+
 import org.springframework.stereotype.Component;
 
 import jp.co.keai.niijimaig.post.domain.Post;
@@ -19,8 +21,8 @@ class MediaCopying implements PreparationMethod {
 	}
 
 	@Override
-	public void prepare(Post post) {
-		PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId());
+	public void prepare(Post post, Instant deadline) {
+		PostMediaList prepared = posts.preparedMedia(post.approvedRevisionId(), post.preparation());
 		post.originalsNotYetIn(prepared).forEach(original -> posts.recordPreparedMedia(
 				post.approvedRevisionId(),
 				original.copiedTo(storage.copyToPublic(post.tenantId(), original.storagePath()))));

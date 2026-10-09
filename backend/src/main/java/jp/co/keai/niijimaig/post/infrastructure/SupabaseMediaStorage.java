@@ -47,7 +47,10 @@ public class SupabaseMediaStorage implements MediaStorage, RenderStorage {
 		return publicPath;
 	}
 
-	/** 名前は HMAC(service role キー, 団体/鍵) の16進。キーを知らない人には推測できず、同じ鍵なら同じ名前になる */
+	/**
+	 * 名前は HMAC(HMAC(service role キー, "media-public-name"), 団体/鍵) の16進。キーを知らない人には推測できず、同じ鍵なら同じ名前になる。
+	 * キーを変えても公開済みの画像は壊れない（公開用の記録に保存先のパスを持つので、名前は作り直さない）
+	 */
 	@Override
 	public String copyToPublic(UUID tenantId, String privatePath, String idempotencyKey) {
 		OwnedStoragePath.require(tenantId, privatePath);
@@ -68,11 +71,19 @@ public class SupabaseMediaStorage implements MediaStorage, RenderStorage {
 				.build();
 	}
 
+	/** 用途ごとに鍵を派生させる（service role キーそのものを、他の用途と共有する鍵として使わない） */
+	static final String NAME_PURPOSE = "media-public-name";
+
 	private String hmacName(String message) {
+		byte[] nameKey = hmac(serviceRoleKey.getBytes(StandardCharsets.UTF_8), NAME_PURPOSE);
+		return HexFormat.of().formatHex(hmac(nameKey, message));
+	}
+
+	private static byte[] hmac(byte[] key, String message) {
 		try {
 			Mac mac = Mac.getInstance("HmacSHA256");
-			mac.init(new SecretKeySpec(serviceRoleKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-			return HexFormat.of().formatHex(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+			mac.init(new SecretKeySpec(key, "HmacSHA256"));
+			return mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
 		} catch (GeneralSecurityException e) {
 			throw new IllegalStateException("公開用の名前を作れません", e);
 		}

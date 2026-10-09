@@ -34,6 +34,20 @@ export class CoverContent {
     return this.background ? [this.background.storagePath] : [];
   }
 
+  /** 保存（RPC save_post_revision）に渡す表紙の形（強調・素材は無い） */
+  toStoredForm() {
+    const { target, keyword, annotation, closingWords, accent } = this.text;
+    return { role: "COVER" as const, target, keyword, annotation, closingWords, accent: accent.code,
+      backgroundPhotoId: this.background?.photoId ?? null };
+  }
+
+  /** テンプレートの描画値（表紙。画像は保存先を参照名にする） */
+  renderValues() {
+    const { target, keyword, annotation, closingWords, accent } = this.text;
+    return { role: "COVER" as const, target, keyword, annotation, closingWords,
+      accentStart: accent.startColor, accentEnd: accent.endColor, background: this.background?.storagePath };
+  }
+
   requiresAiDisclosure(): boolean {
     return false;
   }

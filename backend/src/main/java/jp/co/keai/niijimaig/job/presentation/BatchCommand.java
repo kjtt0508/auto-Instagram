@@ -1,5 +1,6 @@
 package jp.co.keai.niijimaig.job.presentation;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.boot.ApplicationArguments;
@@ -35,7 +36,9 @@ public class BatchCommand implements ApplicationRunner, ExitCodeGenerator {
 
 	private int runJob(String job, String runId) {
 		if ("tick".equals(job)) {
-			tick.run(runId);
+			single(args.getOptionValues("workflow-started-at"))
+					.map(epochSeconds -> Instant.ofEpochSecond(Long.parseLong(epochSeconds)))
+					.ifPresentOrElse(startedAt -> tick.run(runId, startedAt), () -> tick.run(runId));
 			return 0;
 		}
 		if ("daily".equals(job)) {

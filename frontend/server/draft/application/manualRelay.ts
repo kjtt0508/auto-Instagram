@@ -3,9 +3,11 @@ import { GenerationRoute } from "../../../src/domain/draft/GenerationRoute";
 import { Idea } from "../../../src/domain/draft/Idea";
 import { PromptPurpose } from "../../../src/domain/draft/PromptPurpose";
 import { RevisionInstruction } from "../../../src/domain/draft/RevisionInstruction";
-import { checkDraftOutput, readCurrentDraft, type RevisionKeep } from "./draftOutputChecking";
+import { checkDraftOutput, readCurrentDraft, type CurrentDraft } from "./draftOutputChecking";
 import { DraftRefusal, type DraftRecords, type RequestingMember } from "./draftPorts";
-import { isUuid, japanDate, loadContext, requireMember, requireOwnIdea, type DraftContext, type DraftResult } from "./draftSupport";
+import {
+  japanDate, loadContext, requireMember, requireOwnGeneration, requireOwnIdea, requireOwnPromptVersion, type DraftContext, type DraftResult,
+} from "./draftSupport";
 
 // 手動コピペ（REQ-002 設計 1・4章）: 上限・障害のときに、外部のAIに貼るプロンプトを渡し、返ってきた JSON を取り込む。
 // LLM利用回数は数えない（生成経路 MANUAL）
@@ -15,7 +17,7 @@ type ImportRequest = { ideaId?: unknown; promptVersionId?: unknown; json?: unkno
   /** 修正（REVISE）のプロンプトを使ったときだけ: 親の生成・修正指示・現在の下書き */
   parentGenerationId?: unknown; instruction?: unknown; current?: unknown };
 
-type Revision = { instruction: RevisionInstruction; draft: Record<string, unknown>; keep: RevisionKeep };
+type Revision = { instruction: RevisionInstruction; draft: CurrentDraft["draft"]; keep: CurrentDraft["keep"] };
 
 export class ManualRelay {
   constructor(private readonly deps: { records: DraftRecords; newId: () => string; now: () => number }) {}
@@ -26,7 +28,7 @@ export class ManualRelay {
     const revising = request.instruction !== undefined || request.current !== undefined;
     const purpose = revising ? PromptPurpose.REVISE : PromptPurpose.PLAN;
     const revision = revising ? this.revisionOf(request.instruction, request.current) : undefined;
-    const context = await loadContext(this.deps.records, member, purpose, !revising);
+    const context = await loadContext(this.deps.records, member, purpose);
     const idea = request.ideaId !== undefined ? await requireOwnIdea(this.deps.records, member, request.ideaId)
       : await this.recordNewIdea(member, request.ideaText);
     const input = this.inputOf(idea.text, context, revision);
@@ -38,25 +40,26 @@ export class ManualRelay {
     const started = this.deps.now();
     const member = await requireMember(this.deps.records, accessToken);
     const idea = await requireOwnIdea(this.deps.records, member, request.ideaId);
-    const stored = isUuid(request.promptVersionId) ? await this.deps.records.promptVersionOf(request.promptVersionId) : null;
-    if (!stored) throw new DraftRefusal("NOT_FOUND", "プロンプト版が見つかりません");
-    if (stored.tenantId !== member.tenantId) throw new DraftRefusal("FORBIDDEN", "ほかの団体のプロンプト版です");
-    const purpose = stored.version.purpose;
-    if (purpose !== PromptPurpose.PLAN && purpose !== PromptPurpose.REVISE) {
+    const version = await requireOwnPromptVersion(this.deps.records, member, request.promptVersionId);
+    const purpose = version.purpose;
+    if (!purpose.acceptsManualImport()) {
       throw new DraftRefusal("INVALID_REQUEST", `${purpose.label}のプロンプトは取り込めません`);
     }
-    const parentId = purpose === PromptPurpose.REVISE ? await this.requireParent(member, request) : undefined;
+    const parentId = purpose.keepsCurrentDraftTraits() ? await this.requireParent(member, request, idea.id) : undefined;
     const revision = parentId ? this.revisionOf(request.instruction, request.current) : undefined;
-    const context = await loadContext(this.deps.records, member, purpose, purpose === PromptPurpose.PLAN);
+    const context = await loadContext(this.deps.records, member, purpose);
+    // 記録する入力は、取り込んだ時点で組み立て直したもの（貼ったプロンプトを作ったときの入力とは、日付やプロンプトの候補が違うことがある）
     const input = this.inputOf(idea.text, context, revision, japanDate(started));
     const text = typeof request.json === "string" ? request.json : JSON.stringify(request.json ?? null);
-    const checked = checkDraftOutput(text, { style: context.style, prLabel: context.settings.prLabel,
-      backgroundPhotoIds: context.photos.map((p) => p.id), revision: revision?.keep });
+    const checked = checkDraftOutput(text, { style: context.style, prLabel: context.settings.prLabel, purpose,
+      backgroundPhotoIds: context.photos.map((p) => p.id), keep: revision?.keep });
     if (!checked.proposal) throw new DraftRefusal("INVALID_MANUAL_OUTPUT", "取り込めません。直す点を確かめてください", checked.violations, idea.id);
     const generationId = this.deps.newId();
     const json = checked.proposal.toJson();
-    await this.deps.records.recordGeneration({ id: generationId, member, purpose, route: GenerationRoute.MANUAL, ideaId: idea.id,
-      promptVersionId: stored.version.id, input, outcome: "SUCCEEDED", attempts: [], result: json,
+    // 手動コピペ（MANUAL）は LLM利用回数を確保しない（GenerationRoute.countsLlmUsage が false）ので、usage は無い
+    const route = GenerationRoute.MANUAL;
+    await this.deps.records.recordGeneration({ id: generationId, member, purpose, route, ideaId: idea.id,
+      promptVersionId: version.id, input, outcome: "SUCCEEDED", attempts: [], result: json,
       revision: parentId && revision ? { parentGenerationId: parentId, instruction: revision.instruction.text } : undefined });
     return { generationId, ideaId: idea.id, proposal: json, unsupportedFacts: checked.proposal.unsupportedFacts(idea.text), usage: null,
       ...(parentId ? { parentGenerationId: parentId } : {}) };
@@ -80,11 +83,11 @@ export class ManualRelay {
   }
 
   /** 取り込み: 親の生成が自団体のもので、そのネタの続きであること */
-  private async requireParent(member: RequestingMember, request: ImportRequest): Promise<string> {
-    const parent = isUuid(request.parentGenerationId) ? await this.deps.records.generationOf(request.parentGenerationId) : null;
-    if (!parent) throw new DraftRefusal("INVALID_REQUEST", "修正の取り込みには元の生成（parentGenerationId）が必要です");
-    if (parent.tenantId !== member.tenantId) throw new DraftRefusal("FORBIDDEN", "ほかの団体の生成です");
-    if (parent.ideaId !== request.ideaId) throw new DraftRefusal("INVALID_REQUEST", "元の生成とネタが違います");
+  private async requireParent(member: RequestingMember, request: ImportRequest, ideaId: string): Promise<string> {
+    if (request.parentGenerationId === undefined) throw new DraftRefusal("INVALID_REQUEST", "修正の取り込みには元の生成（parentGenerationId）が必要です");
+    const parent = await requireOwnGeneration(this.deps.records, member, request.parentGenerationId);
+    // 比べるのは、記録から読んだネタのID（クライアントが送った文字列とは比べない）
+    if (parent.ideaId !== ideaId) throw new DraftRefusal("INVALID_REQUEST", "元の生成とネタが違います");
     return parent.id;
   }
 

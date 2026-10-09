@@ -2,6 +2,7 @@ package jp.co.keai.niijimaig.post.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
@@ -50,7 +51,8 @@ public class MediaPreparation {
 		this.clock = clock;
 	}
 
-	public void run(ClaimedJob claimed) {
+	/** deadline を過ぎたら新しい作業を始めず、一時的な失敗として返す（写真の投稿の公開の時間を残す） */
+	public void run(ClaimedJob claimed, Instant deadline) {
 		Optional<Post> found = posts.findForPublishing(claimed.requirePostId());
 		if (found.isEmpty()) {
 			succeed(claimed);
@@ -58,7 +60,7 @@ public class MediaPreparation {
 		}
 		Post post = found.get();
 		try {
-			methods.get(post.preparation()).prepare(post);
+			methods.get(post.preparation()).prepare(post, deadline);
 			succeed(claimed);
 		} catch (RenderFailedException e) {
 			failNow(claimed, post, e.getMessage());

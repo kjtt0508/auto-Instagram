@@ -26,6 +26,7 @@ import jp.co.keai.niijimaig.post.domain.PostRevision;
 import jp.co.keai.niijimaig.post.domain.PostStatus;
 import jp.co.keai.niijimaig.post.domain.PrCategory;
 import jp.co.keai.niijimaig.post.domain.PublishResult;
+import jp.co.keai.niijimaig.post.domain.RevisionContent;
 import jp.co.keai.niijimaig.post.domain.ScheduledAt;
 
 /** 投稿の記録（post_current ビューから組み立て、出来事は追記する）。オブジェクトとテーブルの変換はここだけで行う */
@@ -89,17 +90,14 @@ public class JdbcPostRepository implements PostRepository {
 	}
 
 	@Override
-	public PostMediaList preparedMedia(UUID revisionId) {
+	public PostMediaList preparedMedia(UUID revisionId, RevisionContent.Preparation preparation) {
 		RowMapper<PostMedia> mapper = (rs, i) -> new PostMedia(rs.getInt("position"), rs.getString("storage_path"), rs.getInt("width"),
 				rs.getInt("height"), rs.getLong("byte_size"));
-		List<PostMedia> media = isTemplate(revisionId) ? jdbc.query(PREPARED_TEMPLATE_MEDIA, mapper, revisionId, revisionId)
-				: jdbc.query(PREPARED_PHOTO_MEDIA, mapper, revisionId);
+		List<PostMedia> media = switch (preparation) {
+			case RENDER -> jdbc.query(PREPARED_TEMPLATE_MEDIA, mapper, revisionId, revisionId);
+			case COPY -> jdbc.query(PREPARED_PHOTO_MEDIA, mapper, revisionId);
+		};
 		return new PostMediaList(media);
-	}
-
-	private boolean isTemplate(UUID revisionId) {
-		return jdbc.queryForList("select media_source from post_revisions where id = ?", String.class, revisionId).stream()
-				.anyMatch("TEMPLATE"::equals);
 	}
 
 	/** 承認された版の投稿画像。生成画像の由来つきで読む（post_media_origin。REQ-005 設計 5章） */

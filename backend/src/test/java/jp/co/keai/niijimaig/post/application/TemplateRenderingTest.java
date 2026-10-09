@@ -73,6 +73,7 @@ class TemplateRenderingTest {
 	String background = tenant + "/backgrounds/bg.jpg";
 	String pastCover = tenant + "/renders/5/1.jpg";
 
+	MovableClock clock = new MovableClock(NOW);
 	FakeRecords records = new FakeRecords();
 	FakeRenderStorage storage = new FakeRenderStorage();
 	ScriptedRenderer renderer = new ScriptedRenderer();
@@ -86,8 +87,8 @@ class TemplateRenderingTest {
 		storage.objects.put(background, new byte[] {1});
 		storage.objects.put(pastCover, new byte[] {2});
 		records.past = List.of(PastPostCover.restore(UUID.randomUUID(), pastCover));
-		TemplateRendering rendering = new TemplateRendering(records, storage, renderer, media);
-		preparation = new MediaPreparation(posts, new MediaCopying(posts, media), rendering, jobs, Clock.fixed(NOW, ZoneOffset.UTC));
+		TemplateRendering rendering = new TemplateRendering(records, storage, renderer, media, clock);
+		preparation = new MediaPreparation(posts, new MediaCopying(posts, media), rendering, jobs, clock);
 		posts.post = scheduledPost(PostStatus.SCHEDULED);
 	}
 
@@ -101,7 +102,7 @@ class TemplateRenderingTest {
 			throw new RenderBrowserUnavailableException(new RuntimeException("chromium がありません"));
 		});
 
-		preparation.run(claimed(attempt.number));
+		run(claimed(attempt.number));
 
 		if (attempt.finalAttempt) {
 			assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
@@ -149,7 +150,7 @@ class TemplateRenderingTest {
 	void temporaryFailuresAreRetried(ExternalFailure failure) {
 		failure.breakIt(this);
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished).hasSize(1);
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.PENDING);
@@ -162,7 +163,7 @@ class TemplateRenderingTest {
 		media.failure = new IllegalStateException("Storage への複製に失敗: HTTP 502");
 		renderer.script.add(() -> jpeg(1080, 1350));
 
-		preparation.run(claimed(3));
+		run(claimed(3));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
 		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED));
@@ -173,7 +174,7 @@ class TemplateRenderingTest {
 	void missingImageFailsAtOnce() {
 		storage.objects.remove(background);
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
 		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED));
@@ -185,7 +186,7 @@ class TemplateRenderingTest {
 	void wrongSizeFailsAtOnce() {
 		renderer.script.add(() -> jpeg(800, 600));
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
 		assertThat(posts.failures).hasSize(1);
@@ -199,7 +200,7 @@ class TemplateRenderingTest {
 			throw new RenderFailedException("テンプレートの描画に失敗しました");
 		});
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
 		assertThat(posts.failures).hasSize(1);
@@ -211,7 +212,7 @@ class TemplateRenderingTest {
 		posts.post = scheduledPost(PostStatus.DRAFT);
 		storage.objects.remove(background);
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(posts.failures).isEmpty();
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
@@ -226,7 +227,7 @@ class TemplateRenderingTest {
 			renderer.script.add(() -> jpeg(1080, 1350));
 		}
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.SUCCEEDED);
 		assertThat(records.renders.keySet()).containsExactlyInAnyOrder(77L * 10 + 1, 77L * 10 + 2, 77L * 10 + 3);
@@ -241,7 +242,7 @@ class TemplateRenderingTest {
 			renderer.script.add(() -> jpeg(1080, 1350));
 		}
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(renderer.calls).hasSize(3);
 		assertThat(imageKeys(0)).containsExactly(background);
@@ -264,7 +265,7 @@ class TemplateRenderingTest {
 		records.addPublish(approval, 2);
 		records.addPublish(approval, 3);
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.SUCCEEDED);
 		assertThat(renderer.calls).isEmpty();
@@ -280,7 +281,7 @@ class TemplateRenderingTest {
 		records.addRender(approval, 2);
 		renderer.script.add(() -> jpeg(1080, 1350));
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.SUCCEEDED);
 		assertThat(renderer.calls).hasSize(1);
@@ -293,13 +294,94 @@ class TemplateRenderingTest {
 	void staleApprovalIsNotUsed() {
 		records.approvalRevision = UUID.randomUUID();
 
-		preparation.run(claimed(1));
+		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.PENDING);
 		assertThat(renderer.calls).isEmpty();
 	}
 
+	// ───────── tick の持ち時間 ─────────
+
+	@Test
+	@DisplayName("AC-002-23 画像化の途中で持ち時間を超えたら、残りは描かずに一時的な失敗（ジョブの再試行）にする。描けた分は記録に残り、投稿は失敗にしない")
+	void stopsBetweenSlidesWhenTheBudgetRunsOut() {
+		Instant deadline = NOW.plusSeconds(60);
+		renderer.script.add(() -> {
+			clock.set(deadline.plusSeconds(1));
+			return jpeg(1080, 1350);
+		});
+
+		preparation.run(claimed(1), deadline);
+
+		assertThat(renderer.calls).hasSize(1);
+		assertThat(records.renders).hasSize(1);
+		assertThat(records.publish).hasSize(1);
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.PENDING);
+		assertThat(jobs.finished.get(0).outcome.errorKind()).isEqualTo("TIME_BUDGET");
+		assertThat(posts.failures).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-002-23 次の定期処理で、描けた分を作り直さずに続きから準備できる")
+	void resumesAfterTheBudgetRanOut() {
+		Instant deadline = NOW.plusSeconds(60);
+		renderer.script.add(() -> {
+			clock.set(deadline.plusSeconds(1));
+			return jpeg(1080, 1350);
+		});
+		preparation.run(claimed(1), deadline);
+		renderer.calls.clear();
+
+		preparation.run(claimed(2), clock.instant().plusSeconds(600));
+
+		assertThat(renderer.calls).hasSize(2);
+		assertThat(jobs.finished.get(1).next.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(records.publish).hasSize(3);
+	}
+
+	@Test
+	@DisplayName("AC-002-23 持ち時間を過ぎてから始まった準備は、1枚も描かずに一時的な失敗にする")
+	void doesNotStartAfterTheDeadline() {
+		preparation.run(claimed(1), NOW);
+
+		assertThat(renderer.calls).isEmpty();
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.PENDING);
+		assertThat(posts.failures).isEmpty();
+	}
+
 	// ───────── 下ごしらえ ─────────
+
+	/** 持ち時間の指定がない通常の準備 */
+	private void run(ClaimedJob claimed) {
+		preparation.run(claimed, Instant.MAX);
+	}
+
+	static class MovableClock extends Clock {
+		private Instant now;
+
+		MovableClock(Instant now) {
+			this.now = now;
+		}
+
+		void set(Instant next) {
+			now = next;
+		}
+
+		@Override
+		public ZoneOffset getZone() {
+			return ZoneOffset.UTC;
+		}
+
+		@Override
+		public Clock withZone(java.time.ZoneId zone) {
+			return this;
+		}
+
+		@Override
+		public Instant instant() {
+			return now;
+		}
+	}
 
 	private ClaimedJob claimed(int attempt) {
 		Job job = new Job(UUID.randomUUID(), JobType.PREPARE_MEDIA, JobStatus.RUNNING, new Job.Attempts(attempt, 3));
@@ -475,7 +557,7 @@ class TemplateRenderingTest {
 		}
 
 		@Override
-		public PostMediaList preparedMedia(UUID revisionId) {
+		public PostMediaList preparedMedia(UUID revisionId, jp.co.keai.niijimaig.post.domain.RevisionContent.Preparation preparation) {
 			return new PostMediaList(List.of());
 		}
 

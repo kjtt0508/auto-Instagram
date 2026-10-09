@@ -77,6 +77,14 @@ describe("スライド構成の操作", () => {
     expect(BodyContent.of({ text: withImage.text, brief: withImage.brief }).material).toBeUndefined();
   });
 
+  it("AC-002-12 保存の形は表紙・中・最後の順で、強調する語はコードポイントの位置、素材画像は生成画像なら由来つき", () => {
+    const stored = sampleSlides([sampleBody(sampleMaterial("ILLUSTRATION"))]).toStoredForm();
+    expect(stored.map((s) => s.role)).toEqual(["COVER", "BODY", "CLOSING"]);
+    expect(stored[0]).toMatchObject({ target: "同志社大学", accent: "PURPLE", backgroundPhotoId: "bg1" });
+    expect(stored[1]).toMatchObject({ emphases: [{ start: 0, length: 3 }], needsReplacement: false,
+      material: { storagePath: "t/materials/1.jpg", generation: { generationId: "g1", candidatePosition: 1 } } });
+  });
+
   it("BR-002-15 過去の投稿の表紙は3件以上渡せない", () => {
     const three = ["a", "b", "c"].map((id) => PastPostCover.of(id, `t/${id}.jpg`, "p1"));
     expect(() => ClosingContent.of(three)).toThrow("2件まで");

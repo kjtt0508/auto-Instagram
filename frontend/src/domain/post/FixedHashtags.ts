@@ -15,9 +15,13 @@ export class FixedHashtags {
     return new FixedHashtags(FixedHashtags.withoutDuplicates(texts.map((t) => Hashtag.of(t))));
   }
 
-  /** 追加のハッシュタグと合わせた並び（固定が先、重複は先に出たほうを残す） */
+  /**
+   * 追加のハッシュタグと合わせた並び（固定が先、重複は先に出たほうを残す）。
+   * 形が正しくない追加分は並べない（入力中の表示を止めないため。承認の前には violationsOfAdditional が理由を出す）
+   */
   mergedWith(additional: readonly string[]): readonly string[] {
-    return FixedHashtags.withoutDuplicates([...this.hashtags, ...additional.map((t) => Hashtag.of(t))]).map((h) => h.text);
+    const wellFormed = additional.flatMap((t) => Hashtag.parse(t) ?? []);
+    return FixedHashtags.withoutDuplicates([...this.hashtags, ...wellFormed]).map((h) => h.text);
   }
 
   /** 追加のハッシュタグ（AI が足す・人が足す）が満たさない条件。0〜5個で、どれもハッシュタグの形 */

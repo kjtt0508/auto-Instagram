@@ -19,6 +19,16 @@ export class ClosingContent {
     return new ClosingContent([...pastPosts]);
   }
 
+  /** 保存に渡す最後のスライドの形（過去の投稿は承認で決まるので持たない） */
+  toStoredForm() {
+    return { role: "CLOSING" as const };
+  }
+
+  /** テンプレートの描画値（最後のスライド） */
+  renderValues() {
+    return { role: "CLOSING" as const, pastPosts: this.pastPosts.map((p) => p.coverStoragePath) };
+  }
+
   imageRefs(): readonly string[] {
     return this.pastPosts.map((p) => p.coverStoragePath);
   }

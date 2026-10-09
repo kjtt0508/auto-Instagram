@@ -2,6 +2,8 @@ import type { PostFormat } from "@/domain/post/PostFormat";
 import type { PostMediaList } from "@/domain/post/PostMediaList";
 import type { PrCategory } from "@/domain/post/PrCategory";
 import type { ScheduledAt } from "@/domain/post/ScheduledAt";
+import type { SlideList } from "@/domain/slide/SlideList";
+import { CURRENT_TEMPLATE_VERSION } from "@/lib/template/templateRelease";
 import { check, supabase, unwrap } from "./supabase";
 
 // 投稿の状態を変える操作。書き込みはすべて RPC（REQ-001 設計 4章）。業務判断は呼ぶ前にドメインで済ませる
@@ -19,6 +21,28 @@ export async function saveDraft(postId: string | null, draft: DraftContent): Pro
     genreId: draft.genreId ?? "", media: draft.media.items().map((m) => m.toRevisionMedia()),
   };
   // 保存した版IDは RPC から受け取る（読み直すと、その間に他の人が保存した版を受け取ってしまう）
+  const rows = unwrap(await supabase().rpc("save_post_revision", { p_post: postId, p_revision: revision })) as SavedRow[];
+  return { postId: rows[0].post_id, revisionId: rows[0].revision_id };
+}
+
+/** AIで作った（テンプレートの）投稿の内容。素材画像の容量は保存先ごとに添える（RPC が受け取る） */
+export type TemplateDraftContent = {
+  slides: SlideList; captionText: string; prCategory: PrCategory; additionalHashtags: readonly string[];
+  generationId: string | null; materialBytes: Readonly<Record<string, number>>;
+};
+
+/** テンプレートの投稿の下書きを保存する（save_post_revision の TEMPLATE。設計 4章）。投稿の型の設定の版は DB が記録する */
+export async function saveTemplateDraft(postId: string | null, draft: TemplateDraftContent): Promise<{ postId: string; revisionId: string }> {
+  const slides = draft.slides.toStoredForm().map((slide) => {
+    if (slide.role !== "BODY" || !slide.material) return slide;
+    const byteSize = draft.materialBytes[slide.material.storagePath];
+    if (!byteSize) throw new Error("素材画像の容量が分かりません。画像を選び直してください");
+    return { ...slide, material: { ...slide.material, byteSize } };
+  });
+  const revision = {
+    format: "CAROUSEL", mediaSource: "TEMPLATE", caption: draft.captionText, prCategory: draft.prCategory.code, genreId: null,
+    templateVersion: CURRENT_TEMPLATE_VERSION, generationId: draft.generationId, hashtags: [...draft.additionalHashtags], slides,
+  };
   const rows = unwrap(await supabase().rpc("save_post_revision", { p_post: postId, p_revision: revision })) as SavedRow[];
   return { postId: rows[0].post_id, revisionId: rows[0].revision_id };
 }

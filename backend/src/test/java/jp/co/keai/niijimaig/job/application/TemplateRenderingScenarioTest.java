@@ -227,13 +227,34 @@ class TemplateRenderingScenarioTest {
 		Integer count = tx.execute(status -> {
 			jdbc.execute("alter table template_publish_media rename to template_publish_media_hidden");
 			try {
-				return postRepository.preparedMedia(revision).count();
+				return postRepository.preparedMedia(revision, jp.co.keai.niijimaig.post.domain.RevisionContent.Preparation.COPY).count();
 			} finally {
 				status.setRollbackOnly();
 			}
 		});
 
 		assertThat(count).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("AC-002-23 画像化の持ち時間が尽きていても、準備済みの写真の投稿の公開はその回に動く。画像化は次の定期処理に残る")
+	void photoPublishingRunsEvenWhenRenderingHasNoTimeLeft() {
+		String path = tenant + "/posts/" + UUID.randomUUID() + ".jpg";
+		String photoJson = "{\"format\":\"FEED_IMAGE\",\"mediaSource\":\"UPLOAD\",\"caption\":\"写真\",\"prCategory\":\"NONE\",\"media\":[{\"position\":1,"
+				+ "\"storagePath\":\"" + path + "\",\"width\":1080,\"height\":1350,\"byteSize\":500000}]}";
+		UUID photo = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), photoJson);
+		UUID photoRevision = jdbc.queryForObject("select id from post_revisions where post_id = ?", UUID.class, photo);
+		postRepository.recordPreparedMedia(photoRevision, new PostMedia(1, tenant + "/" + UUID.randomUUID() + ".jpg", 1080, 1350, 500000));
+		UUID template = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+
+		// 持ち時間は8分30秒。7分前に始まっていれば、画像化の締め切り（公開の2分前）はもう過ぎていて、公開の時間だけが残っている
+		tick.run("render-budget", Instant.now().minus(Duration.ofMinutes(7)));
+
+		assertThat(status(photo)).isEqualTo("PUBLISHED");
+		assertThat(status(template)).isEqualTo("SCHEDULED");
+		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, latestApproval(template)))
+				.isZero();
+		assertThat(instagram.publishCalls.get()).isEqualTo(1);
 	}
 
 	// ───────── 下ごしらえ ─────────

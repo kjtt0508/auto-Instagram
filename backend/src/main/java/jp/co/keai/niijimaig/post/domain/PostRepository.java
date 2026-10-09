@@ -9,8 +9,8 @@ public interface PostRepository {
 	/** 承認された版がある投稿を、公開の判断に必要な形で取り出す（承認前・破棄済みなどは空） */
 	Optional<Post> findForPublishing(UUID postId);
 
-	/** 公開用に準備済みの画像（承認された版ごと）。未準備なら空の一覧 */
-	PostMediaList preparedMedia(UUID revisionId);
+	/** 公開用に準備済みの画像（承認された版ごと）。未準備なら空の一覧。どの記録を読むかは、版が決める準備のしかたで分ける */
+	PostMediaList preparedMedia(UUID revisionId, RevisionContent.Preparation preparation);
 
 	void recordPreparedMedia(UUID revisionId, PostMedia prepared);
 

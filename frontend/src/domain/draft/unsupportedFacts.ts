@@ -4,6 +4,8 @@
  * （全角→半角、「11月3日」↔「11/3」、「10時」↔「10:00」、「¥1,000」↔「1000円」）。
  * 年は比べない（「2026年11月3日」と「11月3日」は同じ日付）。DB には記録せず、値として返すだけ
  */
+import type { SlideList } from "../slide/SlideList";
+
 const DIGIT = "[0-9０-９]";
 const NUMBER = `${DIGIT}(?:${DIGIT}|[,，])*(?:[.．]${DIGIT}+)?`;
 const YEAR_PREFIX = `(?:${DIGIT}{4}[年/／])?`;
@@ -43,6 +45,25 @@ export function extractFacts(source: string): { key: string; text: string }[] {
   const withoutUrls = source.replace(URL_PATTERN, (m) => " ".repeat(m.length));
   const found = PATTERNS.flatMap(({ regex, keyOf }) => [...withoutUrls.matchAll(regex)].map((m) => ({ key: keyOf(m[0]), text: m[0] })));
   return [...urls, ...found];
+}
+
+/**
+ * 画面で手直し中の内容（スライド構成とキャプション本文）のうち、ネタの本文に無い日付・時刻・金額・URL。
+ * location は DraftProposal.unsupportedFacts と同じ（cover.keyword / slides[0].description / caption …。slides は中のスライドの番号）
+ */
+export function unsupportedFactsInWork(ideaText: string, slides: SlideList, captionText: string): { location: string; fact: string }[] {
+  const [first, ...rest] = slides.items();
+  const cover = first.coverContent()?.text;
+  const bodies = rest.flatMap((s) => s.bodyContent() ?? []);
+  return unsupportedFactsIn(ideaText, [
+    { location: "cover.keyword", text: cover?.keyword ?? "" },
+    { location: "cover.annotation", text: cover?.annotation ?? "" },
+    ...bodies.flatMap((b, i) => [
+      { location: `slides[${i}].heading`, text: b.text.heading },
+      { location: `slides[${i}].description`, text: b.text.description },
+    ]),
+    { location: "caption", text: captionText },
+  ]);
 }
 
 /** 出力の文言（場所つき）のうち、ネタの本文に無い日付・時刻・金額・URL */

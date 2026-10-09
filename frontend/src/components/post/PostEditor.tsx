@@ -12,8 +12,17 @@ import { PostMediaList } from "@/domain/post/PostMediaList";
 import { PrCategory } from "@/domain/post/PrCategory";
 import { forgetNewDraft, recallNewDraft, rememberNewDraft } from "@/lib/api/draftAutosave";
 import { requestApproval, saveDraft, type DraftContent } from "@/lib/api/postCommands";
+import { hasTemplateWork } from "@/lib/api/templateDraftAutosave";
 import { CaptionField } from "./CaptionField";
 import { MediaPicker } from "./MediaPicker";
+import { NavigationBar } from "./NavigationBar";
+import { TemplatePostEditor } from "./TemplatePostEditor";
+
+// S-03 の作り方の2択
+const PHOTOS = { code: "PHOTOS", label: "写真で作る" };
+const AI = { code: "AI", label: "AIで作る" };
+const SOURCES = [PHOTOS, AI];
+type PostSource = typeof PHOTOS;
 
 const EMPTY_DRAFT: DraftContent = {
   format: PostMediaList.empty().format(), media: PostMediaList.empty(), captionText: "", prCategory: PrCategory.NONE, genreId: null,
@@ -33,6 +42,13 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
   const [restored, setRestored] = useState(recalled !== null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  // 新規は冒頭で「写真で作る」「AIで作る」を選ぶ。作成中のAI下書きが端末に残っていればそちらから始める
+  const [source, setSource] = useState<PostSource>(() => (postId === null && hasTemplateWork() ? AI : PHOTOS));
+  const chooser = postId === null && (
+    <GroupedSection title="作り方" label="作り方">
+      <div className="p-2"><SegmentedControl label="作り方" options={SOURCES} selected={source} onSelect={setSource} /></div>
+    </GroupedSection>
+  );
   const update = (patch: Partial<DraftContent>) => {
     const next = { ...draft, ...patch };
     const updated = { ...next, format: next.media.format() };
@@ -62,9 +78,12 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
     setRestored(false);
   };
 
+  if (postId === null && source === AI) return <TemplatePostEditor postId={null} title={title} chooser={chooser} />;
+
   return (
     <form onSubmit={(e) => e.preventDefault()} className="pb-24">
       <NavigationBar title={title} onCancel={() => router.back()} />
+      {chooser}
       {restored && (
         <p className="mt-2 flex items-center justify-between rounded-cell bg-cell px-4 py-2 text-[15px]">
           前回の入力を復元しました
@@ -82,17 +101,6 @@ export function PostEditor({ postId, initial, title }: { postId: string | null; 
       )}
       <ActionBar disabled={saving} onSave={() => save(false)} onRequest={() => save(true)} />
     </form>
-  );
-}
-
-/** HIG のナビゲーションバー: 左にキャンセル、中央に題名 */
-function NavigationBar({ title, onCancel }: { title: string; onCancel: () => void }) {
-  return (
-    <header className="-mx-4 mb-2 grid grid-cols-[1fr_auto_1fr] items-center px-2">
-      <button type="button" onClick={onCancel} className="min-h-11 justify-self-start px-2 text-[17px] text-tint active:opacity-60">キャンセル</button>
-      <h1 className="text-[17px] font-semibold">{title}</h1>
-      <span />
-    </header>
   );
 }
 

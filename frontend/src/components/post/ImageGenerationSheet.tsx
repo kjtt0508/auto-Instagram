@@ -23,11 +23,13 @@ async function candidateImage(url: string): Promise<Blob> {
  * S-13 画像を生成する（REQ-005 設計 3章）: ①画像の種類 ②指示 ③今日の残り回数 ④生成 ⑤候補（2×2、複数選べる）⑥選んだ画像を使う。
  * 閉じるときは候補を片付ける（失敗しても daily が消す）
  */
-export function ImageGenerationSheet({ maxChoices, onChoose, onClose }: {
+export function ImageGenerationSheet({ maxChoices, initialPrompt = "", onChoose, onClose }: {
   maxChoices: number; onChoose: (chosen: ChosenCandidate[]) => Promise<void>; onClose: () => void;
+  /** 指示の初期値（中のスライドの絵の指示など） */
+  initialPrompt?: string;
 }) {
   const [style, setStyle] = useState<ImageStyle>(ImageStyle.ILLUSTRATION);
-  const [promptText, setPromptText] = useState("");
+  const [promptText, setPromptText] = useState(initialPrompt);
   const [usage, setUsage] = useState<ImageGenerationUsage | null>(null);
   // 候補は生成した時の画像の種類を持つ（生成後にセグメントを切り替えても、採用する候補の種類は変わらない）
   const [result, setResult] = useState<{ generationId: string; style: ImageStyle; candidates: { position: number; url: string }[] } | null>(null);

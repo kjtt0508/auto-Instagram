@@ -29,6 +29,12 @@ export class PostStyleSettings {
       parts.closingMessage, parts.accountIntroduction, parts.captionFooter, parts.fixedHashtags, parts.logoStoragePath);
   }
 
+  /** テンプレートに渡す固定の文言（ロゴは保存先を参照名にする） */
+  renderValues() {
+    return { bandText: this.bandText, closingMessage: this.closingMessage, accountIntroduction: this.accountIntroduction,
+      logo: this.logoStoragePath };
+  }
+
   /** 表紙の対象の候補に含まれるか */
   acceptsCoverTarget(target: string): boolean {
     return this.targets.includes(target);

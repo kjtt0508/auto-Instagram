@@ -1,5 +1,7 @@
 package jp.co.keai.niijimaig.post.application;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,16 +40,18 @@ class TemplateRendering implements PreparationMethod {
 	private final RenderStorage storage;
 	private final TemplateRenderer renderer;
 	private final MediaStorage media;
+	private final Clock clock;
 
-	TemplateRendering(RenderRecords records, RenderStorage storage, TemplateRenderer renderer, MediaStorage media) {
+	TemplateRendering(RenderRecords records, RenderStorage storage, TemplateRenderer renderer, MediaStorage media, Clock clock) {
 		this.records = records;
 		this.storage = storage;
 		this.renderer = renderer;
 		this.media = media;
+		this.clock = clock;
 	}
 
 	@Override
-	public void prepare(Post post) {
+	public void prepare(Post post, Instant deadline) {
 		UUID revisionId = post.approvedRevisionId();
 		long approval = guarded("RECORD_UNAVAILABLE", () -> records.approvalEvent(post.id(), revisionId));
 		List<PastPostCover> pastPosts = guarded("RECORD_UNAVAILABLE", () -> records.pastPosts(approval));
@@ -55,23 +59,31 @@ class TemplateRendering implements PreparationMethod {
 				.orElseThrow(() -> new IllegalStateException("画像化できない投稿の版です"));
 		List<RenderPlan.SlideRender> slides = plan.slides();
 		for (int i = 0; i < slides.size(); i++) {
-			prepareSlide(new Target(post, approval, i + 1), plan, slides.get(i));
+			prepareSlide(new Target(post, approval, i + 1), plan, slides.get(i), deadline);
 		}
 	}
 
-	private void prepareSlide(Target target, RenderPlan plan, RenderPlan.SlideRender slide) {
+	private void prepareSlide(Target target, RenderPlan plan, RenderPlan.SlideRender slide, Instant deadline) {
 		UUID revisionId = target.post().approvedRevisionId();
 		if (guarded("RECORD_UNAVAILABLE", () -> records.publishMedia(revisionId, target.approval(), target.position())).isPresent()) {
 			return;
 		}
 		PostMedia rendered = guarded("RECORD_UNAVAILABLE", () -> records.rendered(target.approval(), target.position()))
-				.orElseGet(() -> renderAndRecord(target, plan, slide));
+				.orElseGet(() -> renderBeforeDeadline(target, plan, slide, deadline));
 		String publicPath = guarded("STORAGE_UNAVAILABLE",
 				() -> media.copyToPublic(target.post().tenantId(), rendered.storagePath(), target.publicKey()));
 		guarded("RECORD_UNAVAILABLE", () -> {
 			records.recordPublishMedia(revisionId, target.approval(), rendered.copiedTo(publicPath));
 			return null;
 		});
+	}
+
+	/** 描く前に残り時間を確かめる。足りなければ一時的な失敗（描けた分は記録済みなので、次の tick で続きから） */
+	private PostMedia renderBeforeDeadline(Target target, RenderPlan plan, RenderPlan.SlideRender slide, Instant deadline) {
+		if (!clock.instant().isBefore(deadline)) {
+			throw new RenderTemporaryFailureException("TIME_BUDGET", "tick の持ち時間が足りないので、次の定期処理で続きを描きます", null);
+		}
+		return renderAndRecord(target, plan, slide);
 	}
 
 	private PostMedia renderAndRecord(Target target, RenderPlan plan, RenderPlan.SlideRender slide) {

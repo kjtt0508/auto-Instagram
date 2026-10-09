@@ -1,10 +1,12 @@
 import type { Role } from "../member/Role";
+import type { SlideList } from "../slide/SlideList";
 import { Caption } from "./Caption";
 import type { FailureReason } from "./FailureReason";
 import { ImageSpec } from "./ImageSpec";
 import type { PostFormat } from "./PostFormat";
 import type { PostMediaList } from "./PostMediaList";
 import { PostRevision } from "./PostRevision";
+import type { PostStyleSettings } from "./PostStyleSettings";
 import { PostStatus } from "./PostStatus";
 import type { PrCategory } from "./PrCategory";
 import type { PublishCaption } from "./PublishCaption";
@@ -24,6 +26,10 @@ export class Post {
     readonly content: {
       revisionId: string; format: PostFormat; caption: Caption; prCategory: PrCategory;
       media: PostMediaList; genreId: string | null;
+      /** テンプレートの投稿の版の中身（写真の投稿は無し） */
+      template?: {
+        slides: SlideList; templateVersion: string; settings: PostStyleSettings; additionalHashtags: readonly string[];
+      };
     },
     readonly outcome: { scheduledAt: ScheduledAt | null; result: PublishResult | null; failure: FailureReason | null },
   ) {}
@@ -44,15 +50,19 @@ export class Post {
     return [...media, ...revision.violationsForApproval(prLabel)];
   }
 
-  /** この投稿（最新の版）の内容を表す投稿の版（写真をアップロードした投稿。テンプレートの投稿への対応は REQ-002 の画面の単位で） */
+  /** この投稿（最新の版）の内容を表す投稿の版（写真の投稿は投稿画像一覧、テンプレートの投稿はスライド構成） */
   revision(): PostRevision {
-    const { caption, prCategory, media } = this.content;
-    return PostRevision.ofPhotos({ caption, prCategory, media });
+    const { caption, prCategory, media, template } = this.content;
+    return template
+      ? PostRevision.ofSlides({ caption, prCategory, ...template })
+      : PostRevision.ofPhotos({ caption, prCategory, media });
   }
 
   /** この投稿（最新の版）で承認を依頼できない理由 */
   violationsBeforeApprovalRequest(prLabel: string): string[] {
-    const { format, media, caption, prCategory } = this.content;
+    const { format, media, caption, prCategory, template } = this.content;
+    // テンプレートの投稿に投稿画像は無い（公開用の画像は承認のあとに画像化する）。中身の検査は投稿の版が持つ
+    if (template) return this.revision().violationsForApproval(prLabel);
     return Post.violationsForApprovalRequest({ format, media, captionText: caption.text, prCategory }, prLabel);
   }
 

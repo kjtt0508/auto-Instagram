@@ -18,6 +18,15 @@ export class MaterialImage {
     return new MaterialImage(parts.storagePath, { width: parts.width, height: parts.height }, parts.generated);
   }
 
+  /** 生成画像の由来（人が差し替えた画像なら undefined）。端末への一時保存が使う */
+  generatedImage(): GeneratedImage | undefined {
+    return this.generated;
+  }
+
+  dimensions(): { width: number; height: number } {
+    return this.size;
+  }
+
   isGenerated(): boolean {
     return this.generated !== undefined;
   }

@@ -57,6 +57,11 @@ export class PublishCaption {
     return Hashtag.countIn(this.text);
   }
 
+  /** 全文としてあと何文字入るか（負なら超過。入力中の表示に使う） */
+  remainingLength(): number {
+    return Caption.MAX_LENGTH - this.length();
+  }
+
   /** キャプションに使える残りの文字数（付記・定型・ハッシュタグを除いた分。負なら付記だけで上限を超えている） */
   remainingForCaption(): number {
     return Caption.MAX_LENGTH - (this.length() - this.captionLength);

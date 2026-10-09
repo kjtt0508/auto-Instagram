@@ -19,7 +19,13 @@ import jp.co.keai.niijimaig.post.application.PostPublishing;
 @Service
 public class TickScenario {
 
-	static final Duration BUDGET = Duration.ofMinutes(8);
+	/** ワークフロー（.github/workflows/tick.yml）の timeout-minutes と同じ。これを超えると実行が強制終了される */
+	static final Duration WORKFLOW_TIMEOUT = Duration.ofMinutes(10);
+	/** 強制終了の前に、稼働記録と終了処理を済ませるための余裕 */
+	static final Duration SAFETY_MARGIN = Duration.ofSeconds(90);
+	/** ジョブの開始時刻が分からないときの持ち時間（この処理の開始から） */
+	static final Duration BUDGET = WORKFLOW_TIMEOUT.minus(SAFETY_MARGIN);
+	/** 公開用画像の準備を打ち切って、写真の投稿の公開に残す時間 */
 	static final Duration RESERVE_FOR_PUBLISH = Duration.ofMinutes(2);
 	static final String WORKFLOW = "tick";
 
@@ -41,13 +47,29 @@ public class TickScenario {
 	}
 
 	public void run(String runId) {
-		Instant deadline = clock.instant().plus(BUDGET);
+		run(runId, clock.instant());
+	}
+
+	/**
+	 * @param workflowStartedAt ワークフローの実行（ジョブ）が始まった時刻。Java の起動前の手順（ブラウザの用意など）に
+	 *                          かかった時間も持ち時間から引くために渡す
+	 */
+	public void run(String runId, Instant workflowStartedAt) {
+		Instant deadline = deadlineFor(workflowStartedAt);
+		Instant prepareUntil = deadline.minus(RESERVE_FOR_PUBLISH);
 		heartbeats.started(WORKFLOW, runId);
 		recovery.run();
 		jobs.enqueueForNewSchedules();
-		drain(JobType.PREPARE_MEDIA, runId, deadline.minus(RESERVE_FOR_PUBLISH), preparation::run);
+		// 画像化が長引いても、写真の投稿の公開の時間を残す: 準備は prepareUntil までで打ち切る（スライドの間で確かめる）
+		drain(JobType.PREPARE_MEDIA, runId, prepareUntil, claimed -> preparation.run(claimed, prepareUntil));
 		drain(JobType.PUBLISH_POST, runId, deadline, publishing::run);
 		heartbeats.finished(WORKFLOW, runId);
+	}
+
+	private Instant deadlineFor(Instant workflowStartedAt) {
+		Instant fromWorkflow = workflowStartedAt.plus(WORKFLOW_TIMEOUT).minus(SAFETY_MARGIN);
+		Instant fromNow = clock.instant().plus(BUDGET);
+		return fromWorkflow.isBefore(fromNow) ? fromWorkflow : fromNow;
 	}
 
 	private void drain(JobType type, String runId, Instant until, Consumer<ClaimedJob> work) {

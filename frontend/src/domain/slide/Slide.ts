@@ -38,6 +38,16 @@ export class Slide {
     return this.content instanceof ClosingContent ? this.content : undefined;
   }
 
+  /** 保存（RPC save_post_revision）に渡す形（中身に委ねる） */
+  toStoredForm() {
+    return this.content.toStoredForm();
+  }
+
+  /** テンプレートに渡す描画値（中身に委ねる。画像は保存先を参照名にする） */
+  renderValues() {
+    return this.content.renderValues();
+  }
+
   /** 画像化に必要な画像の参照（保存先）の一覧。実際にあるかは画像化の側で確かめ、無ければ画像化の失敗 */
   imageRefs(): readonly string[] {
     return this.content.imageRefs();

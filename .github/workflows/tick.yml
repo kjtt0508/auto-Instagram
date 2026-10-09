@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # ジョブの開始時刻を記録する。Java の持ち時間は、ここ（timeout-minutes の起点）から数える（TickScenario）。
+      # timeout-minutes を変えたら TickScenario.WORKFLOW_TIMEOUT も揃える。
+      - id: started
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17" }
@@ -33,21 +37,27 @@ jobs:
       # 入れ終わったときだけキャッシュに保存する（失敗した中途半端な状態を残さない）。
       - id: playwright_version
         run: echo "version=$(sed -n 's:.*<playwright.version>\(.*\)</playwright.version>.*:\1:p' backend/pom.xml)" >> "$GITHUB_OUTPUT"
+      # キャッシュのキーに OS とランナーイメージの版を含める（ブラウザが使う OS のライブラリはキャッシュに入らないため、
+      # イメージが変わったら入れ直す）。
       - id: playwright
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ steps.playwright_version.outputs.version }}
+          key: playwright-chromium-${{ runner.os }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ steps.playwright_version.outputs.version }}
       - id: playwright_install
         if: steps.playwright.outputs.cache-hit != 'true'
         continue-on-error: true
         run: npx -y playwright@${{ steps.playwright_version.outputs.version }} install --with-deps chromium
+      # キャッシュが当たったときも、OS のライブラリ（ブラウザ本体以外）は毎回の実行環境に必要。失敗しても公開は止めない。
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        continue-on-error: true
+        run: npx -y playwright@${{ steps.playwright_version.outputs.version }} install-deps chromium
       - if: steps.playwright.outputs.cache-hit != 'true' && steps.playwright_install.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ steps.playwright_version.outputs.version }}
-      - run: java -jar target/batch.jar --job=tick --run-id=${{ github.run_id }}
+          key: playwright-chromium-${{ runner.os }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ steps.playwright_version.outputs.version }}
+      - run: java -jar target/batch.jar --job=tick --run-id=${{ github.run_id }} --workflow-started-at=${{ steps.started.outputs.epoch }}
         working-directory: backend
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

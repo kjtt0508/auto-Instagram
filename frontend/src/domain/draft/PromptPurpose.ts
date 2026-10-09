@@ -30,6 +30,21 @@ export class PromptPurpose {
     return found;
   }
 
+  /** 背景写真の候補から AI に選ばせるのは、最初の生成（PLAN）だけ。修正では背景写真を変えない */
+  choosesBackgroundPhoto(): boolean {
+    return this === PromptPurpose.PLAN;
+  }
+
+  /** 現在の下書きを直す用途か。直すときは PR区分・参照元URL・中のスライドの枚数を現在のまま保つ（修正指示は文言だけを変える） */
+  keepsCurrentDraftTraits(): boolean {
+    return this === PromptPurpose.REVISE;
+  }
+
+  /** 手動コピペで取り込める用途（キャプション生成は REQ-003 で扱うので、いまは取り込めない） */
+  acceptsManualImport(): boolean {
+    return this === PromptPurpose.PLAN || this === PromptPurpose.REVISE;
+  }
+
   /**
    * 下書き案の出力 JSON スキーマ（形は draftJson.ts の読み方と同じ）。
    * PLAN は中のスライド 1〜8枚。REVISE は中のスライドの枚数を bodySlideCount に固定する

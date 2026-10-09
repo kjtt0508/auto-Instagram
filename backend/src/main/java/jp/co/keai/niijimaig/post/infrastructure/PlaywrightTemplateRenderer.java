@@ -54,7 +54,7 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 			Page page = context.newPage();
 			page.setDefaultTimeout(TIMEOUT_MS);
 			page.navigate(ORIGIN + "/" + templateVersion + "/index.html");
-			page.evaluate("data => window.render(data)", data);
+			renderWithinTimeout(page, data);
 			inspector.accept(page);
 			return page.screenshot(new Page.ScreenshotOptions().setType(ScreenshotType.JPEG).setQuality(90));
 		} catch (PlaywrightException e) {
@@ -66,6 +66,26 @@ class PlaywrightTemplateRenderer implements TemplateRenderer {
 			}
 			LOG.warn("画像化の描画に失敗: {}", e.getClass().getSimpleName());
 			throw new RenderFailedException("テンプレートの描画に失敗しました", e);
+		}
+	}
+
+	/**
+	 * window.render(data) を呼び、終わるまで待つ。page.evaluate は締め切りを持たないので、呼び出しだけを evaluate で始めて
+	 * （終わりを window に記録する）、待つのは締め切り付きの waitForFunction にする。描画が終わらなければ TimeoutError
+	 * （PlaywrightException）になり、画像化の失敗として扱われる。
+	 */
+	private static void renderWithinTimeout(Page page, Map<String, Object> data) {
+		page.evaluate("""
+				data => {
+				  window.__rendered = 'pending';
+				  Promise.resolve().then(() => window.render(data)).then(
+				    () => { window.__rendered = 'done'; },
+				    e => { window.__rendered = 'error'; });
+				}
+				""", data);
+		page.waitForFunction("() => window.__rendered !== 'pending'", null, new Page.WaitForFunctionOptions().setTimeout(TIMEOUT_MS));
+		if (!"done".equals(page.evaluate("() => window.__rendered"))) {
+			throw new RenderFailedException("テンプレートの描画に失敗しました");
 		}
 	}
 

@@ -6,6 +6,7 @@ import { PrCategory } from "../post/PrCategory";
 import { SlideList } from "../slide/SlideList";
 import { SlideRole } from "../slide/SlideRole";
 import { DraftProposal } from "./DraftProposal";
+import { PromptPurpose } from "./PromptPurpose";
 
 const context = (sourceUrlRequired = false) => ({ settings: sampleSettings(), prLabel: "【PR】\n", sourceUrlRequired });
 
@@ -201,5 +202,58 @@ describe("文言だけの取り込み（修正指示の再生成。AC-002-05）"
     expect(after.items()[2].bodyContent()?.material?.storagePath).toBe("t/materials/1.jpg");
     expect(after.items()[2].bodyContent()?.text.heading).toBe("見出し2");
     expect(after.items()[3].bodyContent()?.material).toBeUndefined();
+  });
+});
+
+describe("修正の現在の下書き（current）の読み方", () => {
+  it("AC-002-05 知らない欄は捨てて、下書き案の形に整える", () => {
+    const read = DraftProposal.readCurrent({ ...draftJson(), evil: "x", cover: { ...draftJson().cover, extra: 1 } });
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(Object.keys(read.draft).sort()).toEqual(["additionalHashtags", "caption", "cover", "prCategory", "slides", "sourceUrls"]);
+    expect(Object.keys(read.draft.cover as object)).not.toContain("extra");
+    expect(read.keep).toEqual({ bodySlideCount: 3, prCategory: "NONE", sourceUrls: [] });
+  });
+
+  it("AC-002-05 文字数の違反は受け付ける（画面で赤字のままでも作り直せる）", () => {
+    expect(DraftProposal.readCurrent(withCover({ keyword: "あ".repeat(40) })).ok).toBe(true);
+  });
+
+  it("AC-002-05 JSON で32,768文字を超える巨大な値は受け付けない", () => {
+    const huge = draftJson({ caption: "あ".repeat(DraftProposal.CURRENT_MAX_LENGTH) });
+    const read = DraftProposal.readCurrent(huge);
+    expect(read.ok).toBe(false);
+  });
+
+  it("AC-002-05 形が違う・中のスライドが範囲外・PR区分が不正なら受け付けない", () => {
+    expect(DraftProposal.readCurrent("x").ok).toBe(false);
+    expect(DraftProposal.readCurrent(draftJson({ slides: [] })).ok).toBe(false);
+    expect(DraftProposal.readCurrent(draftJson({ prCategory: "AD" })).ok).toBe(false);
+    expect(DraftProposal.readCurrent(draftJson({ caption: 1 })).ok).toBe(false);
+  });
+});
+
+describe("用途ごとの業務ルール", () => {
+  const keep = { bodySlideCount: 3, prCategory: "NONE", sourceUrls: ["https://example.com/a"] };
+
+  it("AC-002-05 修正では PR区分・参照元URLを保ち、背景写真は変えない", () => {
+    const { proposal, violations } = DraftProposal.parse(draftJson({ prCategory: "PR", sourceUrls: [] }),
+      { ...context(), purpose: PromptPurpose.REVISE, keep });
+    expect(violations).toEqual([]);
+    expect(proposal?.prCategory).toBe(PrCategory.NONE);
+    expect(proposal?.sourceUrls).toEqual(["https://example.com/a"]);
+    expect(proposal?.backgroundPhotoId).toBeUndefined();
+  });
+
+  it("AC-002-05 修正で中のスライドの枚数が変わったら違反", () => {
+    expect(DraftProposal.parse(draftJson({ slides: [slideJson(1)] }), { ...context(), purpose: PromptPurpose.REVISE, keep }).violations)
+      .toEqual(["中のスライドは3枚にしてください（1枚）"]);
+  });
+
+  it("AC-002-03 最初の生成では、候補に無い背景写真は違反、候補が0件なら捨てる", () => {
+    expect(DraftProposal.parse(draftJson(), { ...context(), backgroundPhotoIds: ["other"] }).violations)
+      .toEqual(["背景写真のIDが候補にありません: bg1"]);
+    expect(DraftProposal.parse(draftJson(), { ...context(), backgroundPhotoIds: [] }).proposal?.backgroundPhotoId).toBeUndefined();
+    expect(DraftProposal.parse(draftJson(), { ...context(), backgroundPhotoIds: ["bg1"] }).violations).toEqual([]);
   });
 });
