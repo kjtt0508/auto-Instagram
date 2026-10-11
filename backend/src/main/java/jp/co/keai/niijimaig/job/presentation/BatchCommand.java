@@ -31,10 +31,10 @@ public class BatchCommand implements ApplicationRunner, ExitCodeGenerator {
 	@Override
 	public void run(ApplicationArguments args) {
 		String runId = single(args.getOptionValues("run-id")).orElse("local");
-		single(args.getOptionValues("job")).ifPresent(job -> exitCode = runJob(job, runId));
+		single(args.getOptionValues("job")).ifPresent(job -> exitCode = runJob(job, runId, args));
 	}
 
-	private int runJob(String job, String runId) {
+	private int runJob(String job, String runId, ApplicationArguments args) {
 		if ("tick".equals(job)) {
 			single(args.getOptionValues("workflow-started-at"))
 					.map(epochSeconds -> Instant.ofEpochSecond(Long.parseLong(epochSeconds)))
