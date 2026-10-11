@@ -19,6 +19,9 @@ function warn(what: string, e: unknown): void {
   console.warn(`[image-generation] ${what}: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
 }
 
+/** 事前確認でも確保でも同じ案内（画面が用途に合わせた案内に読み替える。コードは IMAGE_LIMIT_REACHED） */
+const limitReached = () => new ImageGenerationRefusal("IMAGE_LIMIT_REACHED", "今日の画像生成は上限に達しました。写真を撮る・選ぶで続けてください");
+
 export type GeneratedCandidates = {
   generationId: string;
   candidates: { position: number; url: string }[];
@@ -39,7 +42,7 @@ export class ImageGenerating {
     await this.requireRemaining(member, settings);
     const translated = await this.translate(member, prompt, settings);
     const reserved = await this.deps.records.tryConsumeImageGeneration(member.tenantId, settings.quota.dailyLimit);
-    if (!reserved.allowed) throw new ImageGenerationRefusal("IMAGE_LIMIT_REACHED", "今日の画像生成は上限に達しました。写真を撮る・選ぶで続けてください");
+    if (!reserved.allowed) throw limitReached();
     const id = this.deps.newId();
     const { urls, timedOut } = await this.makeCandidates(member, id, settings, translated, started);
     const generation = ImageGeneration.of({ id, style, prompt, translatedPrompt: translated, candidateCount: urls.length });
@@ -66,7 +69,7 @@ export class ImageGenerating {
   /** ②確保しない事前確認。上限なら英訳もしない（LLM利用回数を使わない） */
   private async requireRemaining(member: RequestingMember, settings: GenerationSettings): Promise<void> {
     const usage = ImageGenerationUsage.of(await this.deps.records.usedToday(member.tenantId), settings.quota);
-    if (!usage.canGenerate()) throw new ImageGenerationRefusal("IMAGE_LIMIT_REACHED", "今日の画像生成は上限に達しました。写真を撮る・選ぶで続けてください");
+    if (!usage.canGenerate()) throw limitReached();
   }
 
   /** ③英訳できなければ画像生成しない（BR-005-10） */

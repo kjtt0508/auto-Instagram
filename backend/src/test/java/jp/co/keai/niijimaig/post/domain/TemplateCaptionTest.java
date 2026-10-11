@@ -229,7 +229,7 @@ class TemplateCaptionTest {
 		assertThatThrownBy(() -> SlideText.of("", "説明", List.of())).isInstanceOf(IllegalArgumentException.class);
 		assertThat(SlideText.restore("", "説明", List.of()).heading()).isEmpty();
 		assertThatThrownBy(() -> SlideText.restore(null, "説明", List.of())).isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> CoverText.restore(new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", "GREEN")))
+		assertThatThrownBy(() -> CoverText.restore(new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", "YELLOW")))
 				.isInstanceOf(IllegalArgumentException.class);
 		assertThat(CoverText.restore(new CoverText.Parts("対象外", "期末試験", "", "まとめたよ", "RED")).target()).isEqualTo("対象外");
 		assertThatThrownBy(() -> CoverText.of(new CoverText.Parts("対象外", "期末試験", "", "まとめたよ", "RED"), SlideSamples.settings()))

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { AiBadge } from "@/components/ui/AiBadge";
 import { Button } from "@/components/ui/Button";
 import { Cell, GroupedSection } from "@/components/ui/Grouped";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import type { ImageCandidate } from "@/domain/image/ImageCandidate";
 import type { PostStyleSettings } from "@/domain/post/PostStyleSettings";
-import { AccentColor } from "@/domain/slide/AccentColor";
+import { BackgroundPhoto as BackgroundPhotoEntity, BackgroundPhotoList } from "@/domain/slide/BackgroundPhotoList";
+import { BackgroundPhotoOrigin } from "@/domain/slide/BackgroundPhotoOrigin";
 import type { BodyContent } from "@/domain/slide/BodyContent";
 import type { CoverContent } from "@/domain/slide/CoverContent";
 import { CoverText } from "@/domain/slide/CoverText";
@@ -14,6 +16,9 @@ import { SlideList } from "@/domain/slide/SlideList";
 import { SlideText } from "@/domain/slide/SlideText";
 import { viewUrls } from "@/lib/api/mediaStorage";
 import type { BackgroundPhoto } from "@/lib/api/styleRepository";
+import { AccentColorPicker } from "./AccentColorPicker";
+import { BACKGROUND_PHOTO_LIMIT_NOTICE, ImageGenerationPurpose } from "./ImageGenerationPurpose";
+import { ImageGenerationSheet } from "./ImageGenerationSheet";
 
 const INPUT = "block w-full rounded-[8px] bg-fill px-3 py-2 text-[17px] outline-none";
 
@@ -57,11 +62,14 @@ export const WORD_SEPARATOR = /[、,，]/u;
 export const HASHTAG_SEPARATOR = /\s+/u;
 
 /** S-07 ④ 表紙の編集: 対象・キーワード・添え書き・締めの言葉・帯の色・背景写真 */
-export function CoverFields({ cover, settings, photos, facts, onChange }: {
+export function CoverFields({ cover, settings, photos, facts, onChange, onAdoptBackground }: {
   cover: CoverContent; settings: PostStyleSettings; photos: readonly BackgroundPhoto[]; facts: readonly Fact[];
   onChange: (cover: CoverContent) => void;
+  /** 生成した背景を背景写真にして、この表紙の背景にする（失敗したら例外。背景は変わらない） */
+  onAdoptBackground: (candidate: ImageCandidate, description: string) => Promise<void>;
 }) {
   const [choosing, setChoosing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const text = cover.text;
   const issues = text.violationsByField(settings);
   const edit = (patch: Partial<{ target: string; keyword: string; annotation: string; closingWords: string; accentCode: string }>) =>
@@ -87,7 +95,7 @@ export function CoverFields({ cover, settings, photos, facts, onChange }: {
         <input aria-label="締めの言葉" value={text.closingWords} onChange={(e) => edit({ closingWords: e.target.value })} className={INPUT} />
       </Field>
       <Field label="帯の色" violations={issues.accent}>
-        <SegmentedControl label="帯の色" options={AccentColor.all()} selected={text.accent} onSelect={(accent) => edit({ accentCode: accent.code })} />
+        <AccentColorPicker label="帯の色" selected={text.accent} onSelect={(accent) => edit({ accentCode: accent.code })} />
       </Field>
       <Field label="背景写真" violations={[]}>
         <div className="flex items-center justify-between gap-3">
@@ -98,15 +106,31 @@ export function CoverFields({ cover, settings, photos, facts, onChange }: {
       {choosing && (
         <BackgroundPicker photos={photos} selectedId={cover.background?.photoId}
           onChoose={(photo) => { onChange(photo ? cover.withBackground({ photoId: photo.id, storagePath: photo.storagePath }) : cover.withoutBackground()); setChoosing(false); }}
-          onClose={() => setChoosing(false)} />
+          onGenerate={() => setGenerating(true)} onClose={() => setChoosing(false)} />
+      )}
+      {generating && (
+        <ImageGenerationSheet purpose={ImageGenerationPurpose.COVER_BACKGROUND}
+          onChoose={async ([chosen], description) => {
+            await onAdoptBackground(chosen.candidate, description ?? "");
+            setChoosing(false);   // 背景が決まったので、選び直しの画面も閉じる
+          }}
+          onClose={() => setGenerating(false)} />
       )}
     </GroupedSection>
   );
 }
 
-/** 背景写真の選び直し（写真の一覧から1枚。「使わない」で紺の単色） */
-function BackgroundPicker({ photos, selectedId, onChoose, onClose }: {
-  photos: readonly BackgroundPhoto[]; selectedId: string | undefined; onChoose: (photo: BackgroundPhoto | null) => void; onClose: () => void;
+/** 背景写真が増やせるか（30枚未満。数え方は背景写真一覧が持つ。AI が作った背景も数える） */
+function canAddBackground(photos: readonly BackgroundPhoto[]): boolean {
+  return BackgroundPhotoList.of(photos.map((p) => BackgroundPhotoEntity.restore({
+    id: p.id, storagePath: p.storagePath, description: p.description, origin: BackgroundPhotoOrigin.ofAdoption(p.generated),
+  }))).canAdd();
+}
+
+/** 背景写真の選び直し（写真の一覧から1枚。「AIで作る」で背景を作る。「使わない」で紺の単色） */
+function BackgroundPicker({ photos, selectedId, onChoose, onGenerate, onClose }: {
+  photos: readonly BackgroundPhoto[]; selectedId: string | undefined; onChoose: (photo: BackgroundPhoto | null) => void;
+  onGenerate: () => void; onClose: () => void;
 }) {
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
   const key = photos.map((p) => p.storagePath).join("|");
@@ -120,16 +144,24 @@ function BackgroundPicker({ photos, selectedId, onChoose, onClose }: {
         <h1 className="text-[17px] font-semibold">背景写真を選ぶ</h1>
         <span />
       </header>
+      {canAddBackground(photos) ? (
+        <GroupedSection label="AIで背景を作る" footer="作りたい背景を書くと、AIが候補を4枚作ります。選んだ背景は背景写真に登録され、ほかの投稿でも使えます">
+          <div className="p-2"><Button variant="tinted" block onClick={onGenerate}>AIで作る</Button></div>
+        </GroupedSection>
+      ) : (
+        <p role="note" className="mt-2 px-4 text-[13px] text-secondary-label">{BACKGROUND_PHOTO_LIMIT_NOTICE}</p>
+      )}
       <GroupedSection title="表紙に使う写真" footer={photos.length === 0 ? "背景写真がまだありません。管理者が登録すると選べます" : undefined}>
         <ul className="grid grid-cols-2 gap-2 p-2">
           {photos.map((p) => (
             <li key={p.id}>
               <button type="button" aria-pressed={p.id === selectedId} aria-label={p.description} onClick={() => onChoose(p)}
-                className="block w-full overflow-hidden rounded-[8px] text-left ring-tint aria-pressed:ring-4">
+                className="relative block w-full overflow-hidden rounded-[8px] text-left ring-tint aria-pressed:ring-4">
                 {urls.get(p.storagePath)
                   // eslint-disable-next-line @next/next/no-img-element -- 期限付き URL の画像（最適化しない）
                   ? <img src={urls.get(p.storagePath)} alt="" className="aspect-[4/5] w-full object-cover" />
                   : <div className="aspect-[4/5] w-full bg-fill" />}
+                {p.generated && <AiBadge className="absolute left-1.5 top-1.5 bg-black/60 text-on-tint" />}
                 <span className="block truncate px-1 py-1 text-[13px]">{p.description}</span>
               </button>
             </li>

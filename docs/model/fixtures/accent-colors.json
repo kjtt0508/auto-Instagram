@@ -1,0 +1,14 @@
+{
+  "$comment": "アクセント色（表紙の帯の色。REQ-006）の共通テストケース（ADR-0005）。TS・Java の AccentColor の単体テストと、DB テスト（7コードすべてで save_post_revision が成功する）が同じファイルを読む。start/end は帯の左端・右端（単色は同じ値）。new は REQ-006 で足した色。new の色は両端とも白との明るさの比が 3.0 以上（NFR-006-01。比を計算する補助関数はテストだけに置く）。色を足す・変えるときはここと AccentColor（TS・Java）と DB の app.is_accent_code を合わせる",
+  "minContrastRatioForNew": 3.0,
+  "colors": [
+    { "code": "PURPLE", "name": "紫", "start": "#8C52FE", "end": "#8C52FE", "new": false },
+    { "code": "RED", "name": "赤", "start": "#FD3432", "end": "#FE914C", "new": false },
+    { "code": "TEAL", "name": "青緑", "start": "#19BBAA", "end": "#066A85", "new": false },
+    { "code": "BLUE", "name": "青", "start": "#3B82F6", "end": "#1D4ED8", "new": true },
+    { "code": "GREEN", "name": "緑", "start": "#1FA35C", "end": "#0E7C45", "new": true },
+    { "code": "ORANGE", "name": "オレンジ", "start": "#E8590C", "end": "#C2410C", "new": true },
+    { "code": "PINK", "name": "ピンク", "start": "#E5528B", "end": "#C2185B", "new": true }
+  ],
+  "unknownCodes": ["YELLOW", "LIGHT_BLUE", "緑", "green", ""]
+}

@@ -224,6 +224,21 @@ describe("POST /api/drafts", () => {
     expect(f.recorded().p_attempts).toHaveLength(2);
   });
 
+  it("AC-006-01 帯の色が7色以外（黄）なら違反として1回だけ作り直し、緑（7色の1つ）が返れば成功する。2回とも黄なら 502 INVALID_OUTPUT", async () => {
+    const yellow = okStep(draft({ cover: { ...draft().cover, accent: "YELLOW" } }));
+    const recovered = fakes({ gemini: [yellow, okStep(draft({ cover: { ...draft().cover, accent: "GREEN" } }))] });
+    const response = await generate(recovered);
+    expect(response.status).toBe(201);
+    expect(recovered.only("gemini")).toHaveLength(2);
+    expect(((await response.json()) as { proposal: ReturnType<typeof draft> }).proposal.cover.accent).toBe("GREEN");
+
+    const failing = fakes({ gemini: [yellow] });
+    const failure = await generate(failing);
+    expect(failure.status).toBe(502);
+    expect((await errorOf(failure)).code).toBe("INVALID_OUTPUT");
+    expect(failing.only("gemini")).toHaveLength(2);   // 作り直しは1回だけ
+  });
+
   it("AC-002-04 JSON でない出力・スキーマに合わない出力も違反として扱い、生の出力を記録する", async () => {
     const f = fakes({ gemini: [{ text: "申し訳ありません、作れません" }] });
     const error = await errorOf(await generate(f));

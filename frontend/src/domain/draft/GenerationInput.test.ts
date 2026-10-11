@@ -16,13 +16,18 @@ const revision = () => GenerationInput.forRevision({
 const version = (purpose: PromptPurpose, body: string) => PromptVersion.restore({ id: "v1", purpose, versionNo: 1, body });
 
 describe("生成の入力", () => {
-  it("AC-002-03 PLAN の差し込み値は 今日・ネタ・対象の候補・色の候補・背景写真の候補・上限 になる", () => {
+  it("AC-002-03 AC-006-01 PLAN の差し込み値は 今日・ネタ・対象の候補・色の候補（7色）・背景写真の候補・上限 になる", () => {
     const values = plan("・学割", [{ id: "bg1", description: "正門" }, { id: "bg2", description: "図書館" }]).placeholders();
     expect(values).toMatchObject({
       today: "2026-10-05", ideaText: "・学割", coverTargets: "同志社大学、同志社大生",
-      accentColors: "PURPLE（紫）、RED（赤）、TEAL（青緑）", backgroundPhotos: "bg1: 正門\nbg2: 図書館",
+      accentColors: "PURPLE（紫）、RED（赤）、TEAL（青緑）、BLUE（青）、GREEN（緑）、ORANGE（オレンジ）、PINK（ピンク）",
+      backgroundPhotos: "bg1: 正門\nbg2: 図書館",
     });
     expect(Object.keys(values)).not.toContain("currentDraft");
+  });
+
+  it("AC-006-01 REVISE の色の候補も7色", () => {
+    expect(revision().placeholders().accentColors).toBe("PURPLE（紫）、RED（赤）、TEAL（青緑）、BLUE（青）、GREEN（緑）、ORANGE（オレンジ）、PINK（ピンク）");
   });
 
   it("背景写真の候補が 0枚なら「なし」になる", () => {
@@ -133,6 +138,16 @@ describe("プロンプト用途の出力スキーマ", () => {
   it("PLAN は中のスライド 1〜8枚、REVISE は入力の枚数に固定する", () => {
     expect(slidesOf(PromptPurpose.PLAN.outputSchema())).toMatchObject({ minItems: 1, maxItems: 8 });
     expect(slidesOf(PromptPurpose.REVISE.outputSchema({ bodySlideCount: 4 }))).toMatchObject({ minItems: 4, maxItems: 4 });
+  });
+
+  it("AC-006-01 表紙の accent の enum は7色のコード（PLAN も REVISE も）", () => {
+    const accentOf = (schema: Record<string, unknown>) => {
+      const cover = (schema.properties as Record<string, { properties: Record<string, { enum: string[] }> }>).cover;
+      return cover.properties.accent.enum;
+    };
+    const seven = ["PURPLE", "RED", "TEAL", "BLUE", "GREEN", "ORANGE", "PINK"];
+    expect(accentOf(PromptPurpose.PLAN.outputSchema())).toEqual(seven);
+    expect(accentOf(PromptPurpose.REVISE.outputSchema({ bodySlideCount: 4 }))).toEqual(seven);
   });
 
   it("REVISE に枚数が無い・範囲外、CAPTION は作れない", () => {

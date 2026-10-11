@@ -1,3 +1,6 @@
+import { BackgroundPhotoAdopting } from "../../background/application/backgroundPhotoAdopting";
+import { SupabaseBackgroundImages } from "../../background/infrastructure/supabaseBackgroundImages";
+import { SupabaseBackgroundRecords } from "../../background/infrastructure/supabaseBackgroundRecords";
 import { InstagramConnecting } from "../../connection/application/instagramConnecting";
 import { InstagramOAuthClient } from "../../connection/infrastructure/instagramOAuthClient";
 import { SupabaseAdmin } from "../../connection/infrastructure/supabaseAdmin";
@@ -41,6 +44,9 @@ export function apiAssembly(http: typeof fetch = workersFetch, newId: () => stri
       newId, now: () => Date.now(),
     }),
     candidateClearing: async (env: ApiEnv) => new CandidateClearing(new SupabaseImageRecords(supabaseOf(env))),
+    backgroundAdopting: async (env: ApiEnv) => new BackgroundPhotoAdopting({
+      records: new SupabaseBackgroundRecords(supabaseOf(env)), images: new SupabaseBackgroundImages(supabaseOf(env)), newId,
+    }),
     draftGenerating: async (env: ApiEnv) => new DraftGenerating({
       records: new SupabaseDraftRecords(supabaseOf(env)), model: new GeminiDraftClient(env.GEMINI_API_KEY, http),
       newId, now: () => Date.now(),

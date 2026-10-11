@@ -241,7 +241,7 @@ class TemplateRevisionDatabaseTest extends DraftDatabaseSupport {
 		configureStyle();
 		List<String> invalid = List.of(
 				cover("").replace("\"keyword\":\"オトクな割引\",", ""),
-				cover("").replace("\"accent\":\"RED\"", "\"accent\":\"GREEN\""),
+				cover("").replace("\"accent\":\"RED\"", "\"accent\":\"YELLOW\""),
 				cover("").replace("\"target\":\"対象A\"", "\"target\":1"));
 		for (String badCover : invalid) {
 			assertRejected(() -> save(editor, template("niijima@1", "", badCover, body("説明", "[]", null), closing())), "22023", "");

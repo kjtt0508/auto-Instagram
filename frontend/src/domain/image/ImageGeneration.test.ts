@@ -20,6 +20,16 @@ describe("画像生成の指示（BR-005-03, 06）", () => {
   });
 
   it.each([
+    ["0文字", "", false],
+    ["1文字", "夕", true],
+    ["500文字", "夕".repeat(500), true],
+    ["501文字", "夕".repeat(501), false],
+  ])("AC-006-05 表紙の背景の指示も同じ検査（1〜500文字）: %s", (_, text, accepted) => {
+    // 背景の画像生成も REQ-005 の画像生成と同じ指示の検査を通る。「拒否したら画像生成の回数も使わない」は API関数のテスト（imageGenerationApi.test.ts）で確かめる
+    expect(ImagePrompt.violationsOf(text).length === 0).toBe(accepted);
+  });
+
+  it.each([
     ["メールアドレス", "taro@example.com のような雰囲気で"],
     ["電話番号", "連絡先 090-1234-5678 の看板"],
     ["電話番号（区切りなし）", "09012345678"],

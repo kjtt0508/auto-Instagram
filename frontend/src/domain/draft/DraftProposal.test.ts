@@ -3,6 +3,9 @@ import { SAMPLE_TEMPLATE_VERSION, sampleBody, sampleMaterial, sampleSettings, sa
 import { Caption } from "../post/Caption";
 import { PostRevision } from "../post/PostRevision";
 import { PrCategory } from "../post/PrCategory";
+import { AccentColor } from "../slide/AccentColor";
+import { ClosingContent } from "../slide/ClosingContent";
+import { Slide } from "../slide/Slide";
 import { SlideList } from "../slide/SlideList";
 import { SlideRole } from "../slide/SlideRole";
 import { DraftProposal } from "./DraftProposal";
@@ -46,12 +49,21 @@ describe("下書き案を出力 JSON から作る", () => {
     expect(violationsOf(withCover({ keyword: "あ".repeat(12), closingWords: "い".repeat(8) }))).toEqual([]);
   });
 
-  it("AC-002-11 キーワード13文字・締めの言葉9文字・対象「同志社」・色「緑」は違反（下書き案にならない）", () => {
+  it("AC-002-11 キーワード13文字・締めの言葉9文字・対象「同志社」は違反（下書き案にならない）", () => {
     expect(violationsOf(withCover({ keyword: "あ".repeat(13) }))).toEqual(["キーワードは1〜12文字にしてください（13文字）"]);
     expect(violationsOf(withCover({ closingWords: "い".repeat(9) }))).toEqual(["締めの言葉は1〜8文字にしてください（9文字）"]);
     expect(violationsOf(withCover({ target: "同志社" }))).toEqual(["対象は「同志社大学」「同志社大生」のどれかにしてください"]);
-    expect(violationsOf(withCover({ accent: "緑" }))).toEqual(["帯の色は紫・赤・青緑のどれかにしてください"]);
-    expect(DraftProposal.parse(withCover({ accent: "緑" }), context()).proposal).toBeUndefined();
+  });
+
+  it("AC-006-01 帯の色は7色（コード）を受け付け、黄（YELLOW）・水色は違反で下書き案にならない。緑（GREEN）はAC-002-11の違反から有効に変わった", () => {
+    for (const accent of ["PURPLE", "RED", "TEAL", "BLUE", "GREEN", "ORANGE", "PINK"]) {
+      expect(violationsOf(withCover({ accent }))).toEqual([]);
+      expect(DraftProposal.parse(withCover({ accent }), context()).proposal?.cover.accent.code).toBe(accent);
+    }
+    for (const accent of ["YELLOW", "LIGHT_BLUE"]) {
+      expect(violationsOf(withCover({ accent }))).toEqual(["帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください"]);
+      expect(DraftProposal.parse(withCover({ accent }), context()).proposal).toBeUndefined();
+    }
   });
 
   it("AC-002-12 説明文120文字・強調する語3か所は受け付ける", () => {
@@ -202,6 +214,25 @@ describe("文言だけの取り込み（修正指示の再生成。AC-002-05）"
     expect(after.items()[2].bodyContent()?.material?.storagePath).toBe("t/materials/1.jpg");
     expect(after.items()[2].bodyContent()?.text.heading).toBe("見出し2");
     expect(after.items()[3].bodyContent()?.material).toBeUndefined();
+  });
+
+  it("AC-006-02 修正指示の取り込みでは、AI が別の帯の色・別の背景写真を返しても、人が選んだ帯の色と元の背景写真が保たれる（文言は新しくなる）", () => {
+    const chosen = AccentColor.ORANGE;
+    const cover = sampleSlides().items()[0].coverContent()!;
+    expect(cover.background?.photoId).toBe("bg1");
+    const before = SlideList.of([
+      Slide.createCover(cover.withText(cover.text.withAccent(chosen))), Slide.createBody(sampleBody()), Slide.createClosing(ClosingContent.empty())]);
+    for (const aiAccent of ["PURPLE", "RED", "BLUE", "PINK"]) {
+      // 下書き案の背景写真は、元の表紙（bg1）と違う bg2 を返させる
+      const proposal = DraftProposal.parse({ ...withCover({ keyword: "新しい語", accent: aiAccent }), backgroundPhotoId: "bg2" }, context()).proposal!;
+      expect(proposal.backgroundPhotoId).toBe("bg2");
+      const after = before.withDraftText(proposal).items()[0].coverContent()!;
+      expect(after.background?.photoId).toBe("bg1");
+      expect(after.text.keyword).toBe("新しい語");
+      expect(after.text.accent).toBe(chosen);
+      expect(after.renderValues()).toMatchObject({ accentStart: "#E8590C", accentEnd: "#C2410C" });
+      expect(after.toStoredForm().accent).toBe("ORANGE");
+    }
   });
 });
 

@@ -61,6 +61,11 @@ export class CoverText {
     return new CoverText(parts.target, parts.keyword, parts.annotation, parts.closingWords, AccentColor.from(parts.accentCode));
   }
 
+  /** 帯の色だけを差し替えた新しい文言（修正指示の取り込みで、人が選んだ帯の色を保つために使う。REQ-006 AC-006-02） */
+  withAccent(accent: AccentColor): CoverText {
+    return new CoverText(this.target, this.keyword, this.annotation, this.closingWords, accent);
+  }
+
   private static targetViolation(settings: PostStyleSettings): string {
     return `対象は${settings.coverTargets().map((t) => `「${t}」`).join("")}のどれかにしてください`;
   }

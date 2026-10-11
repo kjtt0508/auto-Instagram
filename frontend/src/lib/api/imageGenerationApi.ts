@@ -10,6 +10,18 @@ export type GeneratedCandidates = { generationId: string; candidates: { position
 
 const NO_CONTENT = 204;
 
+/**
+ * API関数が拒んだ理由。`code` はサーバーのエラーコード（IMAGE_LIMIT_REACHED・TRANSLATION_UNAVAILABLE ほか）。
+ * 画面は用途に合わせて、コードから案内の文言に読み替えられる（サーバーは用途を知らない。ImageGenerationPurpose）。
+ * `message` はサーバーが返した文言で、これまでどおりそのまま出せる
+ */
+export class ImageGenerationError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message);
+    this.name = "ImageGenerationError";
+  }
+}
+
 type UsageBody ={ used: number; dailyLimit: number; warnRatio: number };
 
 async function callApi<T>(path: string, body?: unknown): Promise<T> {
@@ -21,7 +33,7 @@ async function callApi<T>(path: string, body?: unknown): Promise<T> {
   });
   if (response.status === NO_CONTENT) return undefined as T;
   const json = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(json?.error?.message ?? "画像を生成できませんでした");
+  if (!response.ok) throw new ImageGenerationError(json?.error?.message ?? "画像を生成できませんでした", json?.error?.code ?? "INTERNAL");
   return json as T;
 }
 

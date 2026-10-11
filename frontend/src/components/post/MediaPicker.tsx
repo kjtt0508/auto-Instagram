@@ -8,7 +8,8 @@ import type { PostMediaList } from "@/domain/post/PostMediaList";
 import type { Tenant } from "@/domain/tenant/Tenant";
 import { uploadDraftImage } from "@/lib/api/mediaStorage";
 import { convertForInstagram } from "@/lib/image/imageConversion";
-import { ImageGenerationSheet, type ChosenCandidate } from "./ImageGenerationSheet";
+import { ImageGenerationPurpose } from "./ImageGenerationPurpose";
+import { ImageGenerationSheet, imageOf, type ChosenCandidate } from "./ImageGenerationSheet";
 import { MediaPreview } from "./MediaPreview";
 
 const FOCUS_CHOICES = [{ label: "上", focus: 0 }, { label: "中央", focus: 0.5 }, { label: "下", focus: 1 }];
@@ -58,8 +59,9 @@ export function MediaPicker({ tenant, media, onChange }: {
   /** AI で作った候補を採用する（4:5、カルーセルの2枚目以降は1枚目に合わせる。BR-005-03） */
   const adopt = async (chosen: ChosenCandidate[]) => {
     let list = media;
-    for (const { candidate, image } of chosen.slice(0, list.remainingSlots())) {
-      list = list.appended(await convertAndUpload(image, { aspect: candidate.targetAspect(list), focus: 0.5, generated: candidate.adopted() }));
+    for (const picked of chosen.slice(0, list.remainingSlots())) {
+      const { candidate } = picked;
+      list = list.appended(await convertAndUpload(imageOf(picked), { aspect: candidate.targetAspect(list), focus: 0.5, generated: candidate.adopted() }));
     }
     onChange(list);
   };
@@ -101,7 +103,7 @@ export function MediaPicker({ tenant, media, onChange }: {
           </div>
         )}
       </GroupedSection>
-      {generating && <ImageGenerationSheet maxChoices={media.remainingSlots()} onChoose={adopt} onClose={() => setGenerating(false)} />}
+      {generating && <ImageGenerationSheet purpose={ImageGenerationPurpose.POST_IMAGE} slots={media.remainingSlots()} onChoose={adopt} onClose={() => setGenerating(false)} />}
     </>
   );
 }

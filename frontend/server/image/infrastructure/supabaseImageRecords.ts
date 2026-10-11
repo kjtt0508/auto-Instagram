@@ -64,5 +64,5 @@ export class SupabaseImageRecords implements ImageGenerationRecords {
 }
 
 /** 候補の保存先（ADR-0009。daily もこの形で探して消す） */
-const candidatePath = (tenantId: string, generationId: string, position: number) =>
+export const candidatePath = (tenantId: string, generationId: string, position: number) =>
   `${tenantId}/candidates/${generationId}/${position}.jpg`;

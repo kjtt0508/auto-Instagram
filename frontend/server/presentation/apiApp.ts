@@ -1,5 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { BackgroundAdoptionRefusal } from "../background/application/backgroundAdoptionPorts";
+import type { BackgroundPhotoAdopting } from "../background/application/backgroundPhotoAdopting";
 import { ConnectingForbiddenError, type ConnectingOutcome, type InstagramConnecting } from "../connection/application/instagramConnecting";
 import type { DraftGenerating } from "../draft/application/draftGenerating";
 import { DraftRefusal } from "../draft/application/draftPorts";
@@ -18,6 +20,12 @@ const logFailure = (where: string, e: unknown) =>
 const REFUSAL_STATUS: Record<ImageGenerationRefusal["code"], ContentfulStatusCode> = {
   INVALID_PROMPT: 400, FORBIDDEN: 403, NOT_FOUND: 404, IMAGE_LIMIT_REACHED: 409,
   TRANSLATION_UNAVAILABLE: 503, GENERATION_FAILED: 502, GENERATION_TIMEOUT: 504,
+};
+
+// 生成した背景を背景写真にする（REQ-006 設計 4章）
+const BACKGROUND_REFUSAL_STATUS: Record<BackgroundAdoptionRefusal["code"], ContentfulStatusCode> = {
+  INVALID_REQUEST: 400, FORBIDDEN: 403, NOT_FOUND: 404, NOT_ADOPTABLE: 409, CANDIDATE_GONE: 409,
+  BACKGROUND_LIMIT_REACHED: 409, STORAGE_FAILED: 502,
 };
 
 // 下書き案の生成（REQ-002 設計 4章）。手動コピペの取り込みの INVALID_OUTPUT は 400、生成での INVALID_OUTPUT は 502
@@ -41,6 +49,7 @@ export function createApiApp<Env extends object>(assembly: {
   connecting: (env: Env) => Promise<InstagramConnecting>;
   imageGenerating: (env: Env) => Promise<ImageGenerating>;
   candidateClearing: (env: Env) => Promise<CandidateClearing>;
+  backgroundAdopting: (env: Env) => Promise<BackgroundPhotoAdopting>;
   draftGenerating: (env: Env) => Promise<DraftGenerating>;
   manualRelay: (env: Env) => Promise<ManualRelay>;
 }) {
@@ -80,6 +89,17 @@ export function createApiApp<Env extends object>(assembly: {
     return c.body(null, 204);
   });
 
+  // 201: 新しく背景写真にした／200: 同じ候補がすでに背景写真になっていた
+  app.post("/background-photos", async (c) => {
+    const body = await objectOf(c);
+    const result = await (await assembly.backgroundAdopting(c.env)).adopt(bearerOf(c), {
+      generationId: typeof body.generationId === "string" ? body.generationId : "",
+      candidatePosition: typeof body.candidatePosition === "number" ? body.candidatePosition : Number.NaN,
+      description: typeof body.description === "string" ? body.description : "",
+    });
+    return c.json(result.background, result.created ? 201 : 200);
+  });
+
   app.post("/drafts", async (c) => {
     const body = await objectOf(c);
     const result = await (await assembly.draftGenerating(c.env)).generate(bearerOf(c), { ideaText: typeof body.ideaText === "string" ? body.ideaText : "" });
@@ -103,6 +123,7 @@ export function createApiApp<Env extends object>(assembly: {
       const mapped = DRAFT_REFUSAL[e.code];
       return c.json(errorBody(mapped.code, e.message, e.details, e.ideaId), mapped.status);
     }
+    if (e instanceof BackgroundAdoptionRefusal) return c.json(errorBody(e.code, e.message, e.details), BACKGROUND_REFUSAL_STATUS[e.code]);
     if (e instanceof ImageGenerationRefusal) return c.json(errorBody(e.code, e.message, e.details), REFUSAL_STATUS[e.code]);
     logFailure(c.req.path, e);
     return c.json(errorBody("INTERNAL", "処理に失敗しました。時間を置いてお試しください"), 500);

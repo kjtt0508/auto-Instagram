@@ -6,6 +6,7 @@ import { useSession } from "@/components/session/SessionGate";
 import { Button } from "@/components/ui/Button";
 import { GroupedSection, Placeholder } from "@/components/ui/Grouped";
 import { DraftProposal } from "@/domain/draft/DraftProposal";
+import type { ImageCandidate } from "@/domain/image/ImageCandidate";
 import { Idea } from "@/domain/draft/Idea";
 import type { LlmUsage } from "@/domain/draft/LlmUsage";
 import { RevisionInstruction } from "@/domain/draft/RevisionInstruction";
@@ -21,6 +22,7 @@ import { SlideText } from "@/domain/slide/SlideText";
 import {
   currentDraftJson, DraftApiError, generateDraft, reviseDraft, type DraftResponse,
 } from "@/lib/api/draftApi";
+import { adoptGeneratedBackground } from "@/lib/api/backgroundPhotoApi";
 import { uploadDraftImage } from "@/lib/api/mediaStorage";
 import { requestApproval, saveTemplateDraft } from "@/lib/api/postCommands";
 import { currentStyleSettings, usableBackgroundPhotos, type BackgroundPhoto } from "@/lib/api/styleRepository";
@@ -30,7 +32,8 @@ import { MATERIAL_ASPECT, CURRENT_TEMPLATE_VERSION } from "@/lib/template/templa
 import {
   additionalHashtagsOf, EMPTY_TEMPLATE_WORK, isRevision, revisionOf, toDraftContent, withDraft, withMaterial, type TemplateWork,
 } from "@/lib/template/templateWork";
-import { ImageGenerationSheet, type ChosenCandidate } from "./ImageGenerationSheet";
+import { ImageGenerationPurpose } from "./ImageGenerationPurpose";
+import { ImageGenerationSheet, imageOf, type ChosenCandidate } from "./ImageGenerationSheet";
 import { ManualRelaySheet, type ManualRevision } from "./ManualRelaySheet";
 import { NavigationBar } from "./NavigationBar";
 import { BodyFields, CoverFields, type Fact } from "./SlideFields";
@@ -169,7 +172,24 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
   };
 
   const chooseCandidate = async (chosen: ChosenCandidate[]) => {
-    if (chosen[0]) await adoptMaterial(selected, chosen[0].image, chosen[0].candidate.adopted());
+    if (chosen[0]) await adoptMaterial(selected, imageOf(chosen[0]), chosen[0].candidate.adopted());
+  };
+
+  /**
+   * 生成した背景を背景写真にして、選んだ表紙の背景にする（REQ-006）。登録（候補の複製と記録）はAPI関数が行い、画面は画像に触れない。
+   * 失敗したら例外のまま（背景は変えない。呼び出し元が理由を出し、やり直せる）。登録できたら、返った写真を背景写真の一覧に足し
+   * （説明文が「選んだ写真」と出ない・選び直しの一覧に出る・30枚の判断が最新になる）、一覧を読み直して最新にする
+   */
+  const adoptBackground = async (candidate: ImageCandidate, description: string) => {
+    if (!cover) return;
+    const photo = await adoptGeneratedBackground({ generationId: candidate.generationId, candidatePosition: candidate.position, description });
+    const adopted: BackgroundPhoto = { id: photo.photoId, storagePath: photo.storagePath, description: photo.description, generated: true };
+    setSetup((current) => current && { ...current, photos: [adopted, ...current.photos.filter((p) => p.id !== adopted.id)] });
+    replaceSlide(selected, Slide.createCover(cover.withBackground({ photoId: photo.photoId, storagePath: photo.storagePath })));
+    // 読み直せなかったとき・まだ一覧に無いときは、足した一覧のままにする
+    usableBackgroundPhotos().then(
+      (fresh) => { if (fresh.some((p) => p.id === adopted.id)) setSetup((current) => current && { ...current, photos: fresh }); },
+      () => undefined);
   };
 
   const addBody = () => {
@@ -258,7 +278,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
           {!slides.canAddBody() && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは{SlideList.BODY_MAX}枚までです</p>}
 
           {cover && <CoverFields key={`${selected}:${work.generationId}`} cover={cover} settings={settings} photos={setup.photos}
-            facts={facts} onChange={(next) => replaceSlide(selected, Slide.createCover(next))} />}
+            facts={facts} onChange={(next) => replaceSlide(selected, Slide.createCover(next))} onAdoptBackground={adoptBackground} />}
           {body && (
             <BodyFields key={`${selected}:${work.generationId}`} body={body} bodyNumber={bodyNumber} facts={factsFor(`slides[${bodyNumber - 1}].`)}
               canRemove={slides.canRemoveBody()} busy={busy !== null}
@@ -275,7 +295,10 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
 
           {work.generationId && (
             <GroupedSection title="修正指示で文言を作り直す" label="修正指示"
-              footer="文言だけを作り直します。素材画像・背景写真・PR区分は保たれます（中のスライドの枚数も変わりません）">
+              footer={<>
+                <span className="block">文言だけを作り直します。素材画像・背景写真・帯の色・PR区分は保たれます（中のスライドの枚数も変わりません）</span>
+                <span className="block">帯の色と背景は、上の表紙の編集で変えられます</span>
+              </>}>
               <textarea aria-label="修正指示" rows={3} value={instruction} onChange={(e) => setInstruction(e.target.value)}
                 placeholder="例: もっとくだけた感じで" className="block w-full resize-y bg-transparent px-4 py-3 text-[17px] outline-none" />
               <div className="border-t border-separator p-2">
@@ -300,7 +323,7 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
       </div>
 
       {sheet === "picture" && body && (
-        <ImageGenerationSheet maxChoices={1} initialPrompt={body.brief.promptText()} onChoose={chooseCandidate} onClose={() => setSheet(null)} />
+        <ImageGenerationSheet purpose={ImageGenerationPurpose.MATERIAL_IMAGE} initialPrompt={body.brief.promptText()} onChoose={chooseCandidate} onClose={() => setSheet(null)} />
       )}
       {sheet === "manual" && (
         <ManualRelaySheet ideaId={work.ideaId} ideaText={work.ideaText} revision={manualRevision}

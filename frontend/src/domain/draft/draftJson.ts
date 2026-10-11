@@ -1,7 +1,7 @@
 /**
  * 下書き案の出力 JSON（Gemini の responseSchema / 手動コピペの貼り付け）を読む。形が違う箇所は、場所を添えた違反として集める。
  * 出力 JSON の形（REQ-002 設計 4章・BR-002-03）:
- *   { cover: { target, keyword, annotation?, closingWords, accent },   // accent は PURPLE | RED | TEAL
+ *   { cover: { target, keyword, annotation?, closingWords, accent },   // accent は PURPLE | RED | TEAL | BLUE | GREEN | ORANGE | PINK（AccentColor.all()）
  *     backgroundPhotoId?,                                               // 背景写真の候補から選んだ写真ID
  *     slides: [{ heading, description, emphases: string[], picturePrompt, needsReplacement }],
  *     caption, additionalHashtags: string[], prCategory,               // NONE | PR

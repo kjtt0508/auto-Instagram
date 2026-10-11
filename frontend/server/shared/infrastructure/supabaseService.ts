@@ -6,7 +6,19 @@ export type ServiceMember = { memberId: string; tenantId: string; roleCode: stri
 const BUCKET = "uploads-private";
 const UNAUTHORIZED = 401;
 const FORBIDDEN = 403;
+const NOT_FOUND = 404;
+const BAD_REQUEST = 400;
 const REASON_MAX_LENGTH = 120;
+
+/**
+ * Supabase の REST・RPC が返したエラー。message は状態コードだけ（ログに出しても安全）。
+ * データベースのエラーコード（SQLSTATE）と文言は、呼び出し側が理由を判断するためだけに持つ（ログ・レスポンスには出さない）
+ */
+export class SupabaseRequestError extends Error {
+  constructor(readonly status: number, readonly dbCode?: string, readonly dbMessage?: string) {
+    super(`Supabase がエラーを返しました（${status}）`);
+  }
+}
 
 export class SupabaseService {
   constructor(private readonly config: SupabaseConfig, private readonly http: typeof fetch = (input, init) => fetch(input, init)) {}
@@ -36,7 +48,11 @@ export class SupabaseService {
   async rest<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.http(`${this.config.url}/rest/v1/${path}`, { ...init, headers: {
       ...this.authHeaders(), "Content-Type": "application/json", ...init.headers } });
-    if (!response.ok) throw new Error(`Supabase がエラーを返しました（${response.status}）`);
+    if (!response.ok) {
+      const reason = ((await response.json().catch(() => null)) ?? {}) as { code?: unknown; message?: unknown };
+      throw new SupabaseRequestError(response.status, typeof reason.code === "string" ? reason.code : undefined,
+        typeof reason.message === "string" ? reason.message.slice(0, REASON_MAX_LENGTH * 2) : undefined);
+    }
     const text = await response.text();
     return (text ? JSON.parse(text) : null) as T;
   }
@@ -61,6 +77,29 @@ export class SupabaseService {
     const response = await this.http(`${this.config.url}/storage/v1/object/${BUCKET}`, {
       method: "DELETE", body: JSON.stringify({ prefixes: paths }), headers: { ...this.authHeaders(), "Content-Type": "application/json" } });
     if (!response.ok) throw new Error(`Storage からの削除に失敗しました（${response.status}）`);
+  }
+
+  /**
+   * 非公開バケットにその保存先の画像があるか。無い（404、または Storage の旧い返し方の「400 で本文の statusCode が 404」）なら false。
+   * それ以外の失敗（鍵の誤りの 400 など）は「無い」に見せず例外にする
+   */
+  async existsPrivate(path: string): Promise<boolean> {
+    const response = await this.http(`${this.config.url}/storage/v1/object/info/${BUCKET}/${path}`, { headers: this.authHeaders() });
+    if (response.ok) return true;
+    if (response.status === NOT_FOUND) return false;
+    if (response.status === BAD_REQUEST) {
+      const reason = ((await response.json().catch(() => null)) ?? {}) as { statusCode?: unknown; error?: unknown };
+      if (String(reason.statusCode) === String(NOT_FOUND) || reason.error === "not_found") return false;
+    }
+    throw new Error(`Storage の確認に失敗しました（${response.status}）`);
+  }
+
+  /** 非公開バケットの中で画像を複製する（バイト列は Supabase の中で複製され、このコードは中身を読まない） */
+  async copyPrivate(fromPath: string, toPath: string): Promise<void> {
+    const response = await this.http(`${this.config.url}/storage/v1/object/copy`, {
+      method: "POST", body: JSON.stringify({ bucketId: BUCKET, sourceKey: fromPath, destinationKey: toPath }),
+      headers: { ...this.authHeaders(), "Content-Type": "application/json" } });
+    if (!response.ok) throw new Error(`Storage での複製に失敗しました（${response.status}）`);
   }
 
   /** 鍵の種類と長さ（値そのものは出さない） */

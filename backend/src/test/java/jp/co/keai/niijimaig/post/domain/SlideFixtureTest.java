@@ -163,14 +163,14 @@ class SlideFixtureTest {
 	}
 
 	@Test
-	@DisplayName("BR-002-12 アクセント色は紫・赤・青緑の3つだけで、赤と青緑はグラデーション")
-	void accentColors() {
-		assertThat(AccentColor.values()).extracting(AccentColor::label).containsExactly("紫", "赤", "青緑");
-		assertThat(AccentColor.RED.startColor()).isEqualTo("#FD3432");
-		assertThat(AccentColor.RED.endColor()).isEqualTo("#FE914C");
-		assertThat(AccentColor.TEAL.startColor()).isEqualTo("#19BBAA");
-		assertThat(AccentColor.TEAL.endColor()).isEqualTo("#066A85");
-		assertThat(AccentColor.PURPLE.startColor()).isEqualTo(AccentColor.PURPLE.endColor());
-		assertThat(AccentColor.find("GREEN")).isEmpty();
+	@DisplayName("AC-006-01 表紙の文言は7色すべてのコードを受け付け、黄（YELLOW）は帯の色の違反（色の値そのものは AccentColorTest）")
+	void coverTextAcceptsTheSevenAccentColors() {
+		for (AccentColor color : AccentColor.values()) {
+			CoverText.Parts parts = new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", color.name());
+			assertThat(CoverText.violationsOf(parts, SlideSamples.settings())).as(color.name()).isEmpty();
+			assertThat(CoverText.of(parts, SlideSamples.settings()).accent()).isEqualTo(color);
+		}
+		assertThat(CoverText.violationsOf(new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", "YELLOW"), SlideSamples.settings()))
+				.containsExactly("帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください");
 	}
 }

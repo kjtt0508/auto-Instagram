@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "@/components/session/SessionGate";
+import { AiBadge } from "@/components/ui/AiBadge";
 import { Button } from "@/components/ui/Button";
 import { Cell, GroupedSection } from "@/components/ui/Grouped";
 import { BackgroundPhoto, BackgroundPhotoList } from "@/domain/slide/BackgroundPhotoList";
+import { BackgroundPhotoOrigin } from "@/domain/slide/BackgroundPhotoOrigin";
 import { registerBackgroundPhoto, retireBackgroundPhoto } from "@/lib/api/generationAdministration";
 import { uploadBackgroundPhoto, viewUrls } from "@/lib/api/mediaStorage";
 import { usableBackgroundPhotos } from "@/lib/api/styleRepository";
@@ -29,7 +31,9 @@ export function BackgroundPhotoSection() {
   const [retiring, setRetiring] = useState<string | null>(null);
 
   const load = () => usableBackgroundPhotos().then((photos) => {
-    setList(BackgroundPhotoList.of(photos.map((p) => BackgroundPhoto.restore(p))));
+    setList(BackgroundPhotoList.of(photos.map((p) => BackgroundPhoto.restore({
+      id: p.id, storagePath: p.storagePath, description: p.description, origin: BackgroundPhotoOrigin.ofAdoption(p.generated),
+    }))));
     return viewUrls(photos.map((p) => p.storagePath)).catch(() => new Map<string, string>()).then(setUrls);
   });
   useEffect(() => {
@@ -126,7 +130,10 @@ function PhotoRow({ photo, url, confirming, busy, onAsk, onCancel, onRetire }: {
           // eslint-disable-next-line @next/next/no-img-element -- 期限付き URL の画像（最適化しない）
           ? <img src={url} alt="" className="aspect-[4/5] w-14 shrink-0 rounded-[6px] object-cover" />
           : <div className="aspect-[4/5] w-14 shrink-0 rounded-[6px] bg-fill" />}
-        <span className="min-w-0 flex-1 break-words text-[15px]">{photo.description}</span>
+        <span className="min-w-0 flex-1 break-words text-[15px]">
+          {photo.isGenerated() && <><AiBadge />{" "}</>}
+          {photo.description}
+        </span>
         {!confirming && <Button variant="destructive" disabled={busy} onClick={onAsk} aria-label={`${photo.description}を使わない`} className="shrink-0 !px-2">使わない</Button>}
       </div>
       {confirming && (

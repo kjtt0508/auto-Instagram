@@ -9,8 +9,14 @@
     { "id": "AC-002-11", "name": "締めの言葉9文字は違反", "with": { "closingWords": { "repeat": "あ", "count": 9 } }, "violations": ["締めの言葉は1〜8文字にしてください（9文字）"] },
     { "id": "AC-002-11", "name": "対象が設定の候補に無い「同志社」は違反", "with": { "target": "同志社" }, "violations": ["対象は「同志社大学」「同志社大生」のどれかにしてください"] },
     { "id": "AC-002-11", "name": "対象は候補のもう一方「同志社大生」でもよい", "with": { "target": "同志社大生" }, "violations": [] },
-    { "id": "AC-002-11", "name": "アクセント色「緑」は違反", "with": { "accent": "緑" }, "violations": ["帯の色は紫・赤・青緑のどれかにしてください"] },
-    { "id": "AC-002-11", "name": "アクセント色は紫・赤・青緑のどれでもよい", "with": { "accent": "TEAL" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色は紫のコード PURPLE でよい", "with": { "accent": "PURPLE" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色は青緑のコード TEAL でよい", "with": { "accent": "TEAL" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色は青のコード BLUE でよい（新しい色）", "with": { "accent": "BLUE" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色は緑のコード GREEN でよい（AC-002-11 の「緑は違反」は有効に変わった）", "with": { "accent": "GREEN" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色はオレンジのコード ORANGE でよい（新しい色）", "with": { "accent": "ORANGE" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色はピンクのコード PINK でよい（新しい色）", "with": { "accent": "PINK" }, "violations": [] },
+    { "id": "AC-006-01", "name": "アクセント色は7色以外のコード YELLOW（黄）は違反", "with": { "accent": "YELLOW" }, "violations": ["帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください"] },
+    { "id": "AC-006-01", "name": "アクセント色は名前「緑」ではなくコードで指定する。名前は違反", "with": { "accent": "緑" }, "violations": ["帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください"] },
     { "id": "AC-002-11", "name": "キーワードが空は違反", "with": { "keyword": "" }, "violations": ["キーワードは1〜12文字にしてください（0文字）"] },
     { "id": "AC-002-11", "name": "締めの言葉が空は違反", "with": { "closingWords": "" }, "violations": ["締めの言葉は1〜8文字にしてください（0文字）"] },
     { "id": "BR-002-12", "name": "添え書きは空でもよい。16文字は受け付ける", "with": { "annotation": { "repeat": "あ", "count": 16 } }, "violations": [] },
@@ -18,7 +24,7 @@
     { "id": "BR-002-18", "name": "絵文字は1文字と数える（キーワード絵文字12個は受け付ける）", "with": { "keyword": { "repeat": "😀", "count": 12 } }, "violations": [] },
     { "id": "BR-002-18", "name": "絵文字13個のキーワードは違反", "with": { "keyword": { "repeat": "😀", "count": 13 } }, "violations": ["キーワードは1〜12文字にしてください（13文字）"] },
     { "id": "AC-002-22", "name": "人がキーワードを13文字に書き換えたときも同じ検査で違反", "with": { "keyword": { "repeat": "い", "count": 13 } }, "violations": ["キーワードは1〜12文字にしてください（13文字）"] },
-    { "id": "AC-002-11", "name": "複数の違反は 対象→キーワード→添え書き→締めの言葉→帯の色 の順に並べる", "with": { "target": "x", "keyword": { "repeat": "あ", "count": 13 }, "annotation": { "repeat": "あ", "count": 17 }, "closingWords": { "repeat": "あ", "count": 9 }, "accent": "緑" }, "violations": ["対象は「同志社大学」「同志社大生」のどれかにしてください", "キーワードは1〜12文字にしてください（13文字）", "添え書きは16文字以内にしてください（17文字）", "締めの言葉は1〜8文字にしてください（9文字）", "帯の色は紫・赤・青緑のどれかにしてください"] }
+    { "id": "AC-002-11", "name": "複数の違反は 対象→キーワード→添え書き→締めの言葉→帯の色 の順に並べる", "with": { "target": "x", "keyword": { "repeat": "あ", "count": 13 }, "annotation": { "repeat": "あ", "count": 17 }, "closingWords": { "repeat": "あ", "count": 9 }, "accent": "YELLOW" }, "violations": ["対象は「同志社大学」「同志社大生」のどれかにしてください", "キーワードは1〜12文字にしてください（13文字）", "添え書きは16文字以内にしてください（17文字）", "締めの言葉は1〜8文字にしてください（9文字）", "帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください"] }
   ],
   "slideBase": { "heading": "学割が使える", "description": "学生証を見せるだけで割引になります。", "emphases": ["学生証"] },
   "slide": [

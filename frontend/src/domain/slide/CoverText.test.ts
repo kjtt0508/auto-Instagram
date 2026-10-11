@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import accentFixture from "../../../../docs/model/fixtures/accent-colors.json";
 import fixture from "../../../../docs/model/fixtures/slide-text.json";
 import { sampleSettings, valueOf } from "../__tests__/samples";
 import { AccentColor } from "./AccentColor";
@@ -34,17 +35,22 @@ describe("表紙の文言（fixtures/slide-text.json）", () => {
   });
 });
 
-describe("アクセント色（設計 0章の色の値）", () => {
-  it("BR-002-12 紫は単色、赤と青緑は左→右のグラデーション", () => {
-    expect([AccentColor.PURPLE.startColor, AccentColor.PURPLE.endColor]).toEqual(["#8C52FE", "#8C52FE"]);
-    expect([AccentColor.RED.startColor, AccentColor.RED.endColor]).toEqual(["#FD3432", "#FE914C"]);
-    expect([AccentColor.TEAL.startColor, AccentColor.TEAL.endColor]).toEqual(["#19BBAA", "#066A85"]);
-    expect(AccentColor.PURPLE.cssBackground()).toBe("#8C52FE");
-    expect(AccentColor.RED.cssBackground()).toBe("linear-gradient(to right, #FD3432, #FE914C)");
+describe("表紙の文言のアクセント色（色の値は AccentColor.test.ts と accent-colors.json）", () => {
+  it("AC-006-01 7色すべてのコードを受け付け、黄（YELLOW）は違反。文言の帯の色は区分の値になる", () => {
+    for (const c of accentFixture.colors) {
+      expect(CoverText.violationsOf(partsOf({ accent: c.code }), sampleSettings())).toEqual([]);
+      expect(CoverText.of(partsOf({ accent: c.code }), sampleSettings()).accent).toBe(AccentColor.from(c.code));
+    }
+    expect(CoverText.violationsOf(partsOf({ accent: "YELLOW" }), sampleSettings()))
+      .toEqual(["帯の色は紫・赤・青緑・青・緑・オレンジ・ピンクのどれかにしてください"]);
   });
 
-  it("BR-002-12 アクセント色は3つだけ", () => {
-    expect(AccentColor.all().map((c) => c.label)).toEqual(["紫", "赤", "青緑"]);
-    expect(() => AccentColor.from("GREEN")).toThrow();
+  it("AC-006-02 帯の色だけを差し替えた新しい文言（ほかの項目は同じ）", () => {
+    const text = CoverText.restore(partsOf({}));
+    const changed = text.withAccent(AccentColor.BLUE);
+    expect(changed.accent).toBe(AccentColor.BLUE);
+    expect([changed.target, changed.keyword, changed.annotation, changed.closingWords])
+      .toEqual([text.target, text.keyword, text.annotation, text.closingWords]);
+    expect(text.accent).toBe(AccentColor.PURPLE);
   });
 });

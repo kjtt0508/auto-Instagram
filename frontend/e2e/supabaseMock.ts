@@ -23,7 +23,7 @@ export type MockWorld = {
   role: "ADMIN" | "APPROVER" | "EDITOR"; heartbeatMinutesAgo: number; posts: MockPost[];
   imageGenerationsUsed?: number; // 今日の画像生成の回数（上限20回・警告0.8）
   styleSettings?: boolean; // 投稿の型の設定がある（REQ-002）
-  backgroundPhotos?: { id: string; path: string; description: string }[]; // 使っている背景写真（REQ-002）
+  backgroundPhotos?: { id: string; path: string; description: string; generated?: boolean }[]; // 使っている背景写真（REQ-002）。generated は AI が作った背景（REQ-006。省略は管理者の登録）
   styleOverride?: Record<string, unknown>; // 保存された投稿の型の設定（save_post_style_settings の引数）
   styleLogoPath?: string; // 投稿の型の設定の現在の版のロゴ
   styleVersion?: number; // 投稿の型の設定の現在の版（styleSettings が true のとき。既定は 1）
@@ -140,7 +140,7 @@ function tableRows(table: string, url: URL, world: MockWorld): unknown[] {
   if (table === "post_style_logos") return world.styleLogoPath ? [{ storage_path: world.styleLogoPath }] : [];
   if (table === "prompt_versions" || table === "active_prompt_versions") return promptRows(table, url, world);
   if (table === "usable_background_photos") {
-    return (world.backgroundPhotos ?? []).map((p) => ({ id: p.id, storage_path: p.path, description: p.description }));
+    return (world.backgroundPhotos ?? []).map((p) => ({ id: p.id, storage_path: p.path, description: p.description, generated: p.generated ?? false }));
   }
   if (table === "member_current") {
     return [{ member_id: "m1", tenant_id: "t1", email: "approver@example.com", display_name: "承認者", role: world.role, active: true }];

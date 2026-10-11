@@ -115,8 +115,9 @@ export class SlideList {
   }
 
   /**
-   * 下書き案の文言だけを取り込んだ新しい構成。表紙の背景写真と、同じ順番の中のスライドの素材画像は保つ
-   * （修正指示の再生成。REQ-002 BR-002-04）。中のスライドが増えたぶんは素材画像なし、減ったぶんは外れる
+   * 下書き案の文言だけを取り込んだ新しい構成。表紙の背景写真・人が選んだ帯の色と、同じ順番の中のスライドの素材画像は保つ
+   * （修正指示の再生成。REQ-002 BR-002-04、REQ-006 AC-006-02。AI が別の帯の色を返しても使わない）。
+   * 中のスライドが増えたぶんは素材画像なし、減ったぶんは外れる
    */
   withDraftText(draft: DraftProposal): SlideList {
     const kept = this.slides.flatMap((s) => s.bodyContent() ?? []);
@@ -124,7 +125,7 @@ export class SlideList {
       ? kept[i].withDraftText(b.text, b.brief) : BodyContent.of({ text: b.text, brief: b.brief })));
     const cover = this.slides[0].coverContent();
     return SlideList.of([
-      Slide.createCover(cover ? cover.withText(draft.cover) : CoverContent.of(draft.cover)),
+      Slide.createCover(cover ? cover.withDraftText(draft.cover) : CoverContent.of(draft.cover)),
       ...bodies,
       this.slides[this.slides.length - 1],
     ]);

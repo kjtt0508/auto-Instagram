@@ -36,6 +36,56 @@
           { "role": "CLOSING", "pastPosts": [] }
         ]
       }
+    },
+    {
+      "id": "AC-006-03",
+      "name": "旧3色の紫（PURPLE）の帯は単色のまま（承認済み・公開済みの投稿の見た目が変わらない）",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "PURPLE" }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#8C52FE", "accentEnd": "#8C52FE" }]
+      }
+    },
+    {
+      "id": "NFR-006-02",
+      "name": "新しい色 青（BLUE）の帯の左端・右端の値（画面のプレビューと画像化で同じ）",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "BLUE" }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#3B82F6", "accentEnd": "#1D4ED8" }]
+      }
+    },
+    {
+      "id": "NFR-006-02",
+      "name": "新しい色 緑（GREEN）の帯の左端・右端の値",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "GREEN" }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#1FA35C", "accentEnd": "#0E7C45" }]
+      }
+    },
+    {
+      "id": "NFR-006-02",
+      "name": "新しい色 オレンジ（ORANGE）の帯の左端・右端の値",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "ORANGE" }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#E8590C", "accentEnd": "#C2410C" }]
+      }
+    },
+    {
+      "id": "NFR-006-02",
+      "name": "新しい色 ピンク（PINK）の帯の左端・右端の値",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "PINK" }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "COVER", "target": "同志社大学", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accentStart": "#E5528B", "accentEnd": "#C2185B" }]
+      }
     }
   ]
 }

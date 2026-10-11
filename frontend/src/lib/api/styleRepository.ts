@@ -30,10 +30,11 @@ export async function currentStyleSettings(): Promise<PostStyleSettings | null> 
 }
 
 /** 背景写真（表紙に使う写真。「使わない」にしていないもの） */
-export type BackgroundPhoto = { id: string; storagePath: string; description: string };
+export type BackgroundPhoto = { id: string; storagePath: string; description: string; generated: boolean };
 
+/** `generated` は AI が作った背景か（背景写真としての採用の記録があるか。ビューが導く列） */
 export async function usableBackgroundPhotos(): Promise<BackgroundPhoto[]> {
-  const rows = unwrap(await supabase().from("usable_background_photos").select("id, storage_path, description")
-    .order("registered_at", { ascending: false })) as { id: string; storage_path: string; description: string }[];
-  return rows.map((r) => ({ id: r.id, storagePath: r.storage_path, description: r.description }));
+  const rows = unwrap(await supabase().from("usable_background_photos").select("id, storage_path, description, generated")
+    .order("registered_at", { ascending: false })) as { id: string; storage_path: string; description: string; generated: boolean }[];
+  return rows.map((r) => ({ id: r.id, storagePath: r.storage_path, description: r.description, generated: r.generated }));
 }

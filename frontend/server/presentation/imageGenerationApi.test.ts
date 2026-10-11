@@ -207,6 +207,16 @@ describe("POST /api/image-generations", () => {
     expect((await generate(fakes({ role: "NONE" }))).status).toBe(403);
   });
 
+  it("AC-006-08 背景（ILLUSTRATION）の生成でも、上限・英訳できない・提供元の失敗はコードで返す（画面が用途に合わせた案内にする）", async () => {
+    const codeOf = async (f: ReturnType<typeof fakes>) => {
+      const response = await generate(f, "夕暮れの京都御苑、やわらかい光", "ILLUSTRATION");
+      return [response.status, ((await response.json()) as { error: { code: string } }).error.code];
+    };
+    expect(await codeOf(fakes({ used: 20 }))).toEqual([409, "IMAGE_LIMIT_REACHED"]);
+    expect(await codeOf(fakes({ gemini: "error" }))).toEqual([503, "TRANSLATION_UNAVAILABLE"]);
+    expect(await codeOf(fakes({ ai: "error" }))).toEqual([502, "GENERATION_FAILED"]);
+  });
+
   it("AC-005-16 団体設定のモデル名を変えると、コード変更なしにそのモデルで呼び、記録に残る", async () => {
     const f = fakes({ model: "@cf/black-forest-labs/flux-2-klein" });
     await generate(f);
