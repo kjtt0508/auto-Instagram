@@ -1,0 +1,46 @@
+# Supabase 無料プロジェクトの一時停止を防ぐ（00_基本設計 6.3）
+# Free プランは7日間使われないとプロジェクトが一時停止し、ログインもできなくなる。
+# tick が動いていれば15分ごとに DB を使うので不要だが、tick を止めている間（Meta 未設定など）のために、
+# 1日1回だけ DB に軽く問い合わせる。書き込みはしない。
+# 失敗したら（一時停止済み・接続できない）ワークフローの失敗メールで気づく → ダッシュボードで Restore project。
+name: keepalive
+on:
+  schedule: [{ cron: "17 3 * * *" }]   # UTC 3:17 = 日本時間 12:17（毎時0分の混雑を避ける）
+  workflow_dispatch: {}
+
+concurrency: { group: keepalive, cancel-in-progress: false }
+
+permissions: { contents: read }
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DB に問い合わせる（読み取りだけ）
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGUSER: ${{ secrets.SUPABASE_DB_USER }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+          PGCONNECT_TIMEOUT: "20"
+        run: |
+          command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q postgresql-client; }
+          # secret は JDBC の形（jdbc:postgresql://…）なので、psql 用に先頭の jdbc: を外す
+          url="${SUPABASE_DB_URL#jdbc:}"
+          if ! psql "$url" -v ON_ERROR_STOP=1 -tAc "select 'ok', now()"; then
+            echo "::error::Supabase の DB に接続できません。一時停止していないか、ダッシュボードで確認してください（Restore project）"
+            exit 1
+          fi
+      - name: Auth に問い合わせる（ログインの入口が生きているか）
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -m 20 \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" "$SUPABASE_URL/auth/v1/health" || true)
+          echo "auth health: $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase の Auth が応答しません（HTTP $code）。一時停止していないか確認してください"
+            exit 1
+          fi
