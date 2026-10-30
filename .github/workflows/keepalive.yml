@@ -32,15 +32,15 @@ jobs:
             echo "::error::Supabase の DB に接続できません。一時停止していないか、ダッシュボードで確認してください（Restore project）"
             exit 1
           fi
+      # キーは送らない。一時停止中はホスト名が引けず 000 になるので、それと 5xx だけを失敗にする
+      # （キー無しの 401 は、Auth が応答している証拠として扱う）
       - name: Auth に問い合わせる（ログインの入口が生きているか）
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" -m 20 \
-            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" "$SUPABASE_URL/auth/v1/health" || true)
+          code=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "$SUPABASE_URL/auth/v1/health" || true)
           echo "auth health: $code"
-          if [ "$code" != "200" ]; then
+          if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
             echo "::error::Supabase の Auth が応答しません（HTTP $code）。一時停止していないか確認してください"
             exit 1
           fi
