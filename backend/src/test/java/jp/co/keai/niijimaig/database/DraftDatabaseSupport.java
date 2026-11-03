@@ -49,6 +49,31 @@ abstract class DraftDatabaseSupport {
 				Integer.class));
 	}
 
+	/** 最後のスライドの画像の保存先（自団体の style/ の JPEG） */
+	String closingPath(String name) {
+		return tenant + "/style/" + name + ".jpg";
+	}
+
+	/** text[] のリテラル（null は NULL の要素）。例 {"a","b"} */
+	static String arrayLiteral(String... paths) {
+		return java.util.Arrays.stream(paths).map(p -> p == null ? "NULL" : "\"" + p + "\"").collect(java.util.stream.Collectors.joining(",", "{", "}"));
+	}
+
+	/** 投稿の型の設定を、最後のスライドの画像つきで保存する（管理者の RPC）。戻り値は新しい版番号 */
+	int saveStyleWithClosingImages(LoggedIn user, String... paths) {
+		return db.as(user, j -> j.queryForObject(
+				"select public.save_post_style_settings('帯', '{対象A,対象B}'::text[], '最後まで', '紹介', '---\nフッター', '{#固定}'::text[], null, ?::text[])",
+				Integer.class, arrayLiteral(paths)));
+	}
+
+	/** 設定の版（団体の version）が持つ最後のスライドの画像を、並べる順に */
+	List<String> closingImagesOfVersion(int version) {
+		return jdbc.queryForList("""
+				select c.storage_path from post_style_closing_images c join post_style_settings s on s.id = c.style_settings_id
+				 where s.tenant_id = ? and s.version = ? order by c.position
+				""", String.class, tenant, version);
+	}
+
 	// ───────── JSON ─────────
 
 	String cover(String extra) {

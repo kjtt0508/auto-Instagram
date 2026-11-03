@@ -15,8 +15,13 @@ public record Slide(Content content) {
 
 		SlideRole role();
 
-		/** 画像化に必要な画像の参照（保存先）の一覧 */
-		List<String> imageRefs();
+		/** 画像化に必要な画像（参照と、見つからないときの失敗理由）。入口はこれ1つで、中身が決める */
+		List<RenderImageNeed> imageNeeds();
+
+		/** 画像化に必要な画像の参照（保存先）の一覧（imageNeeds から作る） */
+		default List<String> imageRefs() {
+			return imageNeeds().stream().map(RenderImageNeed::ref).toList();
+		}
 
 		/** 写真風の生成画像を含むか */
 		boolean requiresAiDisclosure();
@@ -41,6 +46,11 @@ public record Slide(Content content) {
 	/** 画像化に必要な画像の参照（保存先）の一覧。実際にあるかは画像化の側で確かめ、無ければ画像化の失敗 */
 	public List<String> imageRefs() {
 		return content.imageRefs();
+	}
+
+	/** 画像化に必要な画像の参照と、見つからないときの失敗理由（中身に委ねる） */
+	public List<RenderImageNeed> imageNeeds() {
+		return content.imageNeeds();
 	}
 
 	/** 写真風の生成画像を含むか（中身に委ねる） */

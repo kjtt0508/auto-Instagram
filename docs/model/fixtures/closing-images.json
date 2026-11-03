@@ -1,0 +1,28 @@
+{
+  "$comment": "最後のスライドの画像（ClosingImage.planUpload / acceptsType）の共通テストケース（ADR-0005）。画素を扱うのは画面（TS）だけなので TS だけが読む。中央の 4:5 の切り抜きは ImageSpec の切り抜きと共通で、丸めは Math.round（x.5 は切り上げ）。保存の大きさは幅 800 まで縮小（拡大しない）で、高さは 幅/0.8 を Math.round。切り抜いたあとが 400x500 より小さければ violation",
+  "plans": [
+    { "id": "AC-007-01", "name": "横長 2000x1000: 中央の 800x1000 を切り抜く（左右を 600 ずつ切る）。保存は 800x1000", "width": 2000, "height": 1000,
+      "crop": { "x": 600, "y": 0, "width": 800, "height": 1000 }, "output": { "width": 800, "height": 1000 }, "violation": null },
+    { "id": "AC-007-01", "name": "縦長 900x1200: 中央の 900x1125 を切り抜く（上下を 37.5 -> 38 から）。保存は 800x1000 に縮小", "width": 900, "height": 1200,
+      "crop": { "x": 0, "y": 38, "width": 900, "height": 1125 }, "output": { "width": 800, "height": 1000 }, "violation": null },
+    { "id": "AC-007-02", "name": "400x500 は枠ぴったりなのでそのまま受け付ける（拡大も縮小もしない）", "width": 400, "height": 500,
+      "crop": { "x": 0, "y": 0, "width": 400, "height": 500 }, "output": { "width": 400, "height": 500 }, "violation": null },
+    { "id": "AC-007-02", "name": "399x500 は切り抜くと 399x499 で小さい", "width": 399, "height": 500,
+      "crop": { "x": 0, "y": 1, "width": 399, "height": 499 }, "violation": "縦500px・横400px 以上の画像を選んでください" },
+    { "id": "AC-007-02", "name": "400x499 は切り抜くと 399x499 で小さい", "width": 400, "height": 499,
+      "crop": { "x": 1, "y": 0, "width": 399, "height": 499 }, "violation": "縦500px・横400px 以上の画像を選んでください" },
+    { "id": "AC-007-02", "name": "1000x300 は切り抜くと 240x300 で小さい", "width": 1000, "height": 300,
+      "crop": { "x": 380, "y": 0, "width": 240, "height": 300 }, "violation": "縦500px・横400px 以上の画像を選んでください" },
+    { "id": "AC-007-01", "name": "800x1000 はそのまま（縮小しない境目）", "width": 800, "height": 1000,
+      "crop": { "x": 0, "y": 0, "width": 800, "height": 1000 }, "output": { "width": 800, "height": 1000 }, "violation": null },
+    { "id": "AC-007-01", "name": "正方形 1200x1200: 中央の 960x1200 を切り抜き、800x1000 に縮小", "width": 1200, "height": 1200,
+      "crop": { "x": 120, "y": 0, "width": 960, "height": 1200 }, "output": { "width": 800, "height": 1000 }, "violation": null }
+  ],
+  "types": [
+    { "id": "AC-007-03", "mimeType": "image/png", "accepted": true },
+    { "id": "AC-007-03", "mimeType": "image/jpeg", "accepted": true },
+    { "id": "AC-007-03", "mimeType": "image/gif", "accepted": false },
+    { "id": "AC-007-03", "mimeType": "application/pdf", "accepted": false },
+    { "id": "AC-007-03", "mimeType": "", "accepted": false }
+  ]
+}

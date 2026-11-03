@@ -51,7 +51,8 @@ public sealed interface RevisionContent {
 	List<String> violations();
 
 	/**
-	 * 画像化の計画（テンプレートの版・投稿の型の設定の値・スライドごとの値と必要な画像）。最後のスライドには承認で選んだ過去の投稿を載せる。
+	 * 画像化の計画（テンプレートの版・投稿の型の設定の値・スライドごとの値と必要な画像）。pastPosts は承認の記録の過去の投稿の表紙
+	 * （REQ-007 より前の承認。記録が無ければ空）で、最後のスライドの並べる画像は ClosingContent.fromApproval が決める。
 	 * 写真の投稿は画像化しないので無し
 	 */
 	Optional<RenderPlan> renderPlan(List<PastPostCover> pastPosts);
@@ -70,15 +71,20 @@ public sealed interface RevisionContent {
 			slides = List.copyOf(slides);
 		}
 
-		/** 画像化する1枚: テンプレートに渡すスライドの値と、その描画に要る画像の参照 */
-		public record SlideRender(Map<String, Object> values, List<String> imageRefs) {
+		/** 画像化する1枚: テンプレートに渡すスライドの値と、その描画に要る画像（参照と、見つからないときの失敗理由） */
+		public record SlideRender(Map<String, Object> values, List<RenderImageNeed> imageNeeds) {
 
 			public SlideRender {
-				if (values == null || imageRefs == null) {
+				if (values == null || imageNeeds == null) {
 					throw new IllegalArgumentException("スライドの値と画像の参照は必須");
 				}
 				values = Collections.unmodifiableMap(new LinkedHashMap<>(values));
-				imageRefs = List.copyOf(imageRefs);
+				imageNeeds = List.copyOf(imageNeeds);
+			}
+
+			/** 描画に要る画像の参照（保存先）だけ */
+			public List<String> imageRefs() {
+				return imageNeeds.stream().map(RenderImageNeed::ref).toList();
 			}
 		}
 	}
@@ -214,17 +220,20 @@ public sealed interface RevisionContent {
 			return settings.fixedHashtags().violationsOfAdditional(additionalHashtags);
 		}
 
-		/** ロゴは最後のスライドだけが使うので、最後のスライドの画像の参照に足す */
+		/**
+		 * 最後のスライドの並べる画像は、承認の記録の過去の投稿の表紙（REQ-007 より前の承認）か、この版が使った設定の最後のスライドの画像
+		 * （ClosingContent.fromApproval）。ロゴは最後のスライドだけが使うので、最後のスライドの画像に足す
+		 */
 		@Override
 		public Optional<RenderPlan> renderPlan(List<PastPostCover> pastPosts) {
-			List<Slide> inOrder = slides.withPastPosts(pastPosts).inOrder();
+			List<Slide> inOrder = slides.withClosing(ClosingContent.fromApproval(pastPosts, settings.closingImages())).inOrder();
 			List<RenderPlan.SlideRender> renders = new ArrayList<>();
 			for (Slide slide : inOrder) {
-				List<String> refs = new ArrayList<>(slide.imageRefs());
+				List<RenderImageNeed> needs = new ArrayList<>(slide.imageNeeds());
 				if (slide.role() == SlideRole.CLOSING) {
-					settings.logoStoragePath().ifPresent(refs::add);
+					settings.logoImageNeed().ifPresent(needs::add);
 				}
-				renders.add(new RenderPlan.SlideRender(slide.renderValues(), refs));
+				renders.add(new RenderPlan.SlideRender(slide.renderValues(), needs));
 			}
 			return Optional.of(new RenderPlan(templateVersion, settings.renderValues(), renders));
 		}

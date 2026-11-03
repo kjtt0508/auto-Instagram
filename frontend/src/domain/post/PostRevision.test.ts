@@ -52,10 +52,10 @@ describe("投稿の版とAI生成の表示", () => {
 });
 
 describe("投稿の版（テンプレートの投稿）", () => {
-  it("AC-002-02 画像化に必要な画像の参照は、背景写真・素材画像（と設定のロゴ）。過去の投稿の表紙は含まない", () => {
+  it("AC-002-02 AC-007-04 画像化に必要な画像の参照は、背景写真・素材画像（と設定のロゴ）。最後のスライドの画像は版に持たせない（設定の版で決まる）", () => {
     const revision = templateRevision([sampleBody(sampleMaterial("ILLUSTRATION"))]);
     expect(revision.imageRefs()).toEqual(["t/backgrounds/1.jpg", "t/materials/1.jpg"]);
-    expect(sampleSlides().items().at(-1)?.closingContent()?.pastPosts).toEqual([]);
+    expect(sampleSlides().items().at(-1)?.closingContent()?.imageRefs()).toEqual([]);
     expect(photoRevision().imageRefs()).toEqual([]);
   });
 

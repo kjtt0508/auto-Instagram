@@ -1,5 +1,6 @@
 import caption from "../../../../docs/model/fixtures/caption.json";
 import { CaptionFooter } from "../post/CaptionFooter";
+import { ClosingImageList } from "../post/ClosingImageList";
 import { FixedHashtags } from "../post/FixedHashtags";
 import { GeneratedImage } from "../post/GeneratedImage";
 import { PostStyleSettings } from "../post/PostStyleSettings";
@@ -20,12 +21,13 @@ export const valueOf = (value: string | { repeat: string; count: number }): stri
 /** テスト用のテンプレートの版の名前 */
 export const SAMPLE_TEMPLATE_VERSION = "niijima@1";
 
-/** テスト用の投稿の型の設定（キャプションの定型は caption.json の架空の文面） */
-export const sampleSettings = (): PostStyleSettings => PostStyleSettings.of({
-  tenantId: "t1", version: 1, bandText: "テスト帯", coverTargets: ["同志社大学", "同志社大生"],
+/** テスト用の投稿の型の設定（キャプションの定型は caption.json の架空の文面）。最後のスライドの画像（保存先の並び）と版を指定できる */
+export const sampleSettings = (closingImagePaths: readonly string[] = [], version = 1): PostStyleSettings => PostStyleSettings.of({
+  tenantId: "t1", version, bandText: "テスト帯", coverTargets: ["同志社大学", "同志社大生"],
   closingMessage: "最後までご覧くださりありがとうございます", accountIntroduction: "@test_account",
   captionFooter: CaptionFooter.of(caption.templateSettings.captionFooter),
   fixedHashtags: FixedHashtags.of(caption.templateSettings.fixedHashtags),
+  closingImages: ClosingImageList.restore(closingImagePaths),
 });
 
 export const sampleCoverText = (): CoverText => CoverText.restore(

@@ -87,7 +87,7 @@ class TemplateCaptionTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-02 画像化の計画は、スライドごとに必要な画像だけを持つ（表紙は背景写真、中は素材画像、最後は過去の投稿の表紙）。アップロードの投稿には無い")
+	@DisplayName("AC-002-02 AC-007-09 画像化の計画は、スライドごとに必要な画像だけを持つ（表紙は背景写真、中は素材画像、最後は改修前の承認の過去の投稿の表紙）。アップロードの投稿には無い")
 	void renderPlanHasImagesPerSlide() {
 		PastPostCover past = PastPostCover.restore(java.util.UUID.randomUUID(), "t/posts/p2/1.jpg");
 		RevisionContent.RenderPlan plan = revision(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.ILLUSTRATION))))
@@ -107,7 +107,7 @@ class TemplateCaptionTest {
 	void logoBelongsToClosingSlide() {
 		PostStyleSettings base = SlideSamples.settings();
 		PostStyleSettings withLogo = new PostStyleSettings(java.util.UUID.randomUUID(), 1, "帯", List.of("同志社大学"), "ありがとう", "@a",
-				base.captionFooter(), base.fixedHashtags(), Optional.of("t/style/logo.png"));
+				base.captionFooter(), base.fixedHashtags(), Optional.of("t/style/logo.png"), ClosingImageList.empty());
 		PostRevision revision = PostRevision.ofSlides(new Caption("本文"), PrCategory.NONE,
 				SlideSamples.slides(List.of(SlideSamples.body(Optional.empty()))), SlideSamples.TEMPLATE_VERSION, withLogo, List.of());
 
@@ -221,10 +221,8 @@ class TemplateCaptionTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-15 過去の投稿の表紙・スライドの文言・表紙の文言は、検査する of か記録から戻す restore で作る")
+	@DisplayName("AC-007-09 過去の投稿の表紙は記録から戻す restore だけ。スライドの文言・表紙の文言は、検査する of か記録から戻す restore で作る")
 	void creationPaths() {
-		var own = java.util.UUID.randomUUID();
-		assertThatThrownBy(() -> PastPostCover.of(own, "t/a.jpg", own)).hasMessageContaining("投稿自身");
 		assertThatThrownBy(() -> PastPostCover.restore(null, "t/a.jpg")).isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> SlideText.of("", "説明", List.of())).isInstanceOf(IllegalArgumentException.class);
 		assertThat(SlideText.restore("", "説明", List.of()).heading()).isEmpty();

@@ -1,14 +1,14 @@
 {
-  "$comment": "テンプレートに渡す描画値（スライドの描画値・投稿の型の設定の描画値）の共通テストケース（ADR-0005）。画面のプレビュー（TS）と画像化（Java）が同じスライド・設定から同じ JSON を作る。slides は入力（表紙: target/keyword/annotation/closingWords/accent/background、中: heading/description/emphases/material、最後: pastPosts）。background・material・logo・pastPosts は無ければキーごと出さない。expected はテンプレートが読む JSON（キーの並びは問わない）",
+  "$comment": "テンプレートに渡す描画値（スライドの描画値・投稿の型の設定の描画値）の共通テストケース（ADR-0005）。画面のプレビュー（TS）と画像化（Java）が同じスライド・設定から同じ JSON を作る。slides は入力（表紙: target/keyword/annotation/closingWords/accent/background、中: heading/description/emphases/material、最後: approvalPastPosts と closingImages）。最後のスライドの入力は ClosingContent.fromApproval(approvalPastPosts, closingImages) に渡す（approvalPastPosts＝投稿履歴（承認）に記録した過去の投稿の表紙の保存先＝REQ-007 より前の承認だけ、closingImages＝投稿の版が使った設定の版の最後のスライドの画像の保存先。どちらもキー必須で無ければ []。記録が1件以上あれば記録、無ければ設定の画像。BR-007-05）。最後のスライドの expected の pastPosts は niijima@1 の差し込みの名前で、中身は並べる画像の参照（REQ-007）。background・material・logo は無ければキーごと出さない。expected はテンプレートが読む JSON（キーの並びは問わない）",
   "cases": [
     {
       "id": "AC-002-02",
-      "name": "背景写真・素材画像・ロゴ・過去の投稿の表紙がすべてある（強調する語は絵文字の後ろ）",
+      "name": "背景写真・素材画像・ロゴ・過去の投稿の表紙（改修前の承認の記録）がすべてある（強調する語は絵文字の後ろ）",
       "settings": { "bandText": "新島info", "closingMessage": "ご覧いただきありがとうございます", "accountIntroduction": "@niijima_info\n学生生活を発信中", "logo": "t/style/logo.png" },
       "slides": [
         { "role": "COVER", "target": "同志社大学", "keyword": "期末試験日程", "annotation": "＼ テスト前に確認 ／", "closingWords": "まとめたよ", "accent": "RED", "background": "t/backgrounds/1.jpg" },
         { "role": "BODY", "heading": "学割が使える", "description": "😀学割を使おう", "emphases": ["学割"], "material": "t/materials/1.jpg" },
-        { "role": "CLOSING", "pastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"] }
+        { "role": "CLOSING", "approvalPastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"], "closingImages": [] }
       ],
       "expected": {
         "settings": { "bandText": "新島info", "closingMessage": "ご覧いただきありがとうございます", "accountIntroduction": "@niijima_info\n学生生活を発信中", "logo": "t/style/logo.png" },
@@ -21,12 +21,12 @@
     },
     {
       "id": "AC-002-02",
-      "name": "背景写真・素材画像・ロゴ・過去の投稿の表紙が無い（紺の単色・文字だけのカード）。キーごと出さない",
+      "name": "背景写真・素材画像・ロゴ・最後のスライドの画像が無い（紺の単色・文字だけのカード）。キーごと出さない",
       "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
       "slides": [
         { "role": "COVER", "target": "同志社大生", "keyword": "学割", "annotation": "", "closingWords": "まとめたよ", "accent": "TEAL" },
         { "role": "BODY", "heading": "映画が安い", "description": "学生証で割引になります", "emphases": [] },
-        { "role": "CLOSING", "pastPosts": [] }
+        { "role": "CLOSING", "approvalPastPosts": [], "closingImages": [] }
       ],
       "expected": {
         "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
@@ -35,6 +35,56 @@
           { "role": "BODY", "heading": "映画が安い", "segments": [{ "text": "学生証で割引になります", "emphasized": false }] },
           { "role": "CLOSING", "pastPosts": [] }
         ]
+      }
+    },
+    {
+      "id": "AC-007-05",
+      "name": "設定の最後のスライドの画像が1枚（記録なし）。1枚だけが並ぶ",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "CLOSING", "approvalPastPosts": [], "closingImages": ["t/style/c1.jpg"] }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "CLOSING", "pastPosts": ["t/style/c1.jpg"] }]
+      }
+    },
+    {
+      "id": "AC-007-05",
+      "name": "設定の最後のスライドの画像が2枚（記録なし）。1枚目が左・2枚目が右の順",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "CLOSING", "approvalPastPosts": [], "closingImages": ["t/style/c1.jpg", "t/style/c2.jpg"] }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "CLOSING", "pastPosts": ["t/style/c1.jpg", "t/style/c2.jpg"] }]
+      }
+    },
+    {
+      "id": "AC-007-09",
+      "name": "承認の記録の過去の投稿の表紙2件と設定の画像2枚が両方ある。記録が勝つ（設定の画像には変えない）",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "CLOSING", "approvalPastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"], "closingImages": ["t/style/c1.jpg", "t/style/c2.jpg"] }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "CLOSING", "pastPosts": ["t/posts/p2/1.jpg", "t/posts/p3/1.jpg"] }]
+      }
+    },
+    {
+      "id": "AC-007-09",
+      "name": "承認の記録が1件だけでも、記録が勝つ（設定の画像は混ぜない）",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "CLOSING", "approvalPastPosts": ["t/posts/p2/1.jpg"], "closingImages": ["t/style/c1.jpg", "t/style/c2.jpg"] }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "CLOSING", "pastPosts": ["t/posts/p2/1.jpg"] }]
+      }
+    },
+    {
+      "id": "AC-007-09",
+      "name": "改修前の設定の版（最後のスライドの画像なし）で記録も0件の承認。画像の欄なしで描く",
+      "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+      "slides": [{ "role": "CLOSING", "approvalPastPosts": [], "closingImages": [] }],
+      "expected": {
+        "settings": { "bandText": "", "closingMessage": "ありがとう", "accountIntroduction": "" },
+        "slides": [{ "role": "CLOSING", "pastPosts": [] }]
       }
     },
     {

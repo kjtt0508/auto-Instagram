@@ -1,5 +1,4 @@
 import type { DraftProposal } from "../draft/DraftProposal";
-import type { PastPostCover } from "../post/PastPostCover";
 import type { PostStyleSettings } from "../post/PostStyleSettings";
 import { PictureBrief } from "./PictureBrief";
 import { BodyContent } from "./BodyContent";
@@ -131,9 +130,17 @@ export class SlideList {
     ]);
   }
 
-  /** 画像化のとき、承認で選んだ過去の投稿の表紙を最後のスライドに載せた新しい構成 */
-  withPastPosts(covers: readonly PastPostCover[]): SlideList {
-    return SlideList.of([...this.slides.slice(0, -1), Slide.createClosing(ClosingContent.of(covers))]);
+  /** 最後のスライドの中身を差し替えた新しい構成（並べる画像を入れる。プレビュー・承認の画面・投稿の表示。REQ-007） */
+  withClosing(content: ClosingContent): SlideList {
+    return SlideList.of([...this.slides.slice(0, -1), Slide.createClosing(content)]);
+  }
+
+  /**
+   * 投稿の型の設定の版の最後のスライドの画像を最後のスライドに入れた新しい構成。
+   * どの版の設定を渡すかは呼び出し側が決める（編集の画面は最新の版、承認の画面・投稿の表示は投稿の版が記録した版。BR-007-04）
+   */
+  withClosingImagesOf(settings: PostStyleSettings): SlideList {
+    return this.withClosing(ClosingContent.fromClosingImages(settings.closingImages()));
   }
 
   /** 保存（RPC save_post_revision の slides）に渡す形 */

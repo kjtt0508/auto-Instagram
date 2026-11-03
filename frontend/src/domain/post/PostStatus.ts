@@ -60,6 +60,15 @@ export class PostStatus {
     return this === PostStatus.PUBLISHED;
   }
 
+  /**
+   * 最後のスライドの画像を承認の記録から作るか（予約中・公開処理中・公開済み・失敗）。
+   * 下書き・承認待ち・破棄は承認の記録で描かない（投稿の版が記録した設定の版の画像。REQ-007 BR-007-04, 05）
+   */
+  drawsFromApproval(): boolean {
+    return this === PostStatus.SCHEDULED || this === PostStatus.PUBLISHING
+      || this === PostStatus.PUBLISHED || this === PostStatus.FAILED;
+  }
+
   /** カレンダーでの色区分（REQ-001 設計 3章 S-02） */
   calendarColor(): string {
     return this.color;

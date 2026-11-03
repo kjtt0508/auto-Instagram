@@ -14,6 +14,8 @@ import jp.co.keai.niijimaig.post.domain.BodyContent;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.CaptionFooter;
 import jp.co.keai.niijimaig.post.domain.ClosingContent;
+import jp.co.keai.niijimaig.post.domain.ClosingImage;
+import jp.co.keai.niijimaig.post.domain.ClosingImageList;
 import jp.co.keai.niijimaig.post.domain.CoverContent;
 import jp.co.keai.niijimaig.post.domain.CoverText;
 import jp.co.keai.niijimaig.post.domain.FixedHashtags;
@@ -29,7 +31,7 @@ import jp.co.keai.niijimaig.post.domain.SlideList;
 import jp.co.keai.niijimaig.post.domain.SlideText;
 
 /**
- * テンプレートの投稿の版を記録（revision_templates・post_slides・cover_*・body_*・revision_hashtags）から組み立てる。
+ * テンプレートの投稿の版を記録（revision_templates・post_slides・cover_*・body_*・revision_hashtags、設定の版の post_style_closing_images）から組み立てる。
  * DB は形だけを検査して保存するので、文字数・強調の重なり・追加のハッシュタグは検査せずに戻す（restore 系。違反は violations() で返る）。
  */
 @Component
@@ -56,7 +58,9 @@ class JdbcTemplateRevisions {
 	private PostStyleSettings settings(UUID revisionId, UUID tenantId) {
 		return jdbc.queryForObject("""
 				select s.id, s.version, s.band_text, s.cover_targets, s.closing_message, s.account_introduction, s.caption_footer,
-				       s.fixed_hashtags, l.storage_path as logo
+				       s.fixed_hashtags, l.storage_path as logo,
+				       coalesce((select array_agg(c.storage_path order by c.position) from post_style_closing_images c
+				                  where c.style_settings_id = s.id), '{}'::text[]) as closing_images
 				  from revision_templates t join post_style_settings s on s.id = t.style_settings_id
 				  left join post_style_logos l on l.style_settings_id = s.id
 				 where t.revision_id = ?
@@ -66,7 +70,8 @@ class JdbcTemplateRevisions {
 	private PostStyleSettings settingsOf(ResultSet rs, UUID tenantId) throws SQLException {
 		return new PostStyleSettings(tenantId, rs.getInt("version"), rs.getString("band_text"), strings(rs, "cover_targets"),
 				rs.getString("closing_message"), rs.getString("account_introduction"), new CaptionFooter(rs.getString("caption_footer")),
-				new FixedHashtags(strings(rs, "fixed_hashtags")), Optional.ofNullable(rs.getString("logo")));
+				new FixedHashtags(strings(rs, "fixed_hashtags")), Optional.ofNullable(rs.getString("logo")),
+				ClosingImageList.restore(strings(rs, "closing_images").stream().map(ClosingImage::restore).toList()));
 	}
 
 	private static List<String> strings(ResultSet rs, String column) throws SQLException {

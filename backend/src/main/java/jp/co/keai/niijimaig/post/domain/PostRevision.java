@@ -6,7 +6,8 @@ import java.util.Optional;
 /**
  * 投稿の版: 投稿の内容の1つの版。投稿の版の中身（写真の投稿は投稿画像一覧、テンプレートの投稿はスライド構成・テンプレートの版・
  * 投稿の型の設定の版・追加のハッシュタグ）と、キャプション・PR区分。形ごとの違いは中身に委ね、ここでは分岐しない。
- * 版は変更しない。最後のスライドの過去の投稿は持たない（承認の出来事で決まり、画像化のときに SlideList.withPastPosts で渡す）。
+ * 版は変更しない。最後のスライドに並べる画像は持たない（使った設定の版の最後のスライドの画像で決まり、REQ-007 より前の承認は承認の記録の
+ * 過去の投稿の表紙を使う。画像化のときに SlideList.withClosing で渡す）。
  * TS の PostRevision と揃える
  */
 public final class PostRevision {
@@ -89,7 +90,7 @@ public final class PostRevision {
 		return content.violations();
 	}
 
-	/** 画像化の計画（テンプレートの版・設定の値・スライドごとの値と必要な画像）。最後のスライドには承認で選んだ過去の投稿の表紙を載せる。写真の投稿は無し */
+	/** 画像化の計画（テンプレートの版・設定の値・スライドごとの値と必要な画像）。pastPosts は REQ-007 より前の承認の記録の過去の投稿の表紙。写真の投稿は無し */
 	public Optional<RevisionContent.RenderPlan> renderPlan(List<PastPostCover> pastPosts) {
 		return content.renderPlan(pastPosts);
 	}

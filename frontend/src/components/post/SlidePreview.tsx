@@ -17,11 +17,9 @@ type Status = "loading" | "rendered" | "error";
  * 文言と画像は postMessage で渡す（ADR-0010。srcdoc は使わない。文言は iframe 内で textContent として描かれる）。
  * 1080×1350 を縮小して表示する。onSelect を渡すと、スライドを選べる（編集するスライドの切り替え）
  */
-export function SlidePreview({ slides, settings, templateVersion, selectedIndex, onSelect, closingNote }: {
+export function SlidePreview({ slides, settings, templateVersion, selectedIndex, onSelect }: {
   slides: SlideList; settings: PostStyleSettings; templateVersion: string;
   selectedIndex?: number; onSelect?: (index: number) => void;
-  /** 最後のスライドの下に出す注記 */
-  closingNote?: string;
 }) {
   const images = useSlideImages(slides, settings);
   const items = slides.items();
@@ -46,7 +44,6 @@ export function SlidePreview({ slides, settings, templateVersion, selectedIndex,
                 <span data-mark="replacement" className="shrink-0 whitespace-nowrap rounded-full bg-caution px-2 py-0.5 font-semibold text-black">差し替えが必要</span>
               )}
             </div>
-            {closingNote && index === items.length - 1 && <p className="text-[13px] text-secondary-label">{closingNote}</p>}
           </li>
         );
       })}

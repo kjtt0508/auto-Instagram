@@ -1,4 +1,5 @@
 import { CaptionFooter } from "@/domain/post/CaptionFooter";
+import { ClosingImageList } from "@/domain/post/ClosingImageList";
 import { FixedHashtags } from "@/domain/post/FixedHashtags";
 import { PostStyleSettings } from "@/domain/post/PostStyleSettings";
 import { supabase, unwrap, unwrapOptional } from "./supabase";
@@ -15,11 +16,14 @@ export const SETTINGS_COLUMNS = "id, tenant_id, version, band_text, cover_target
 export async function toSettings(row: SettingsRow): Promise<PostStyleSettings> {
   const logo = unwrapOptional(await supabase().from("post_style_logos").select("storage_path")
     .eq("style_settings_id", row.id).maybeSingle<{ storage_path: string }>());
+  // 最後のスライドの画像は並べる順（position）に読む。0枚の版は行が無い（REQ-007）
+  const closing = unwrap(await supabase().from("post_style_closing_images").select("storage_path")
+    .eq("style_settings_id", row.id).order("position")) as { storage_path: string }[];
   return PostStyleSettings.of({
     tenantId: row.tenant_id, version: row.version, bandText: row.band_text, coverTargets: row.cover_targets,
     closingMessage: row.closing_message, accountIntroduction: row.account_introduction,
     captionFooter: CaptionFooter.of(row.caption_footer), fixedHashtags: FixedHashtags.of(row.fixed_hashtags),
-    logoStoragePath: logo?.storage_path,
+    logoStoragePath: logo?.storage_path, closingImages: ClosingImageList.restore(closing.map((c) => c.storage_path)),
   });
 }
 

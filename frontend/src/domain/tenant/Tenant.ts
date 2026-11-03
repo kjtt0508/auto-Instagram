@@ -26,4 +26,9 @@ export class Tenant {
   logoPathFor(fileId: string): string {
     return `${this.id}/style/${fileId}.png`;
   }
+
+  /** 最後のスライドの画像の保存先（uploads-private/{団体ID}/style/…。JPEG。ロゴと同じ場所で、管理者だけが書ける。REQ-007） */
+  closingImagePathFor(fileId: string): string {
+    return `${this.id}/style/${fileId}.jpg`;
+  }
 }

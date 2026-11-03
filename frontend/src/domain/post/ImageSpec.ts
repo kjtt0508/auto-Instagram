@@ -38,14 +38,18 @@ export class ImageSpec {
    * 縮小後の幅が320未満なら変換できない（理由を violation に入れる）。
    */
   planConversion(source: { width: number; height: number }, target: { aspect: number; focus: number }) {
-    const crop = this.cropArea(source, target);
+    const crop = ImageSpec.cropAreaOf(source, target);
     const outputWidth = Math.min(crop.width, ImageSpec.MAX_WIDTH);
     const outputHeight = Math.round(outputWidth / target.aspect);
     const violation = outputWidth < ImageSpec.MIN_WIDTH ? `画像が小さすぎます（幅${ImageSpec.MIN_WIDTH}px以上が必要です）` : null;
     return { crop, output: { width: outputWidth, height: outputHeight }, violation };
   }
 
-  private cropArea(source: { width: number; height: number }, target: { aspect: number; focus: number }) {
+  /**
+   * 元画像から目標比率で切り抜く範囲（focus は切り取る位置。0=左上、0.5=中央、1=右下）。丸めは Math.round。
+   * 画像仕様の変換の計画と、最後のスライドの画像（ClosingImage.planUpload。中央 4:5）が共通に使う
+   */
+  static cropAreaOf(source: { width: number; height: number }, target: { aspect: number; focus: number }) {
     const focus = Math.min(1, Math.max(0, target.focus));
     if (source.width / source.height > target.aspect) {
       const width = Math.round(source.height * target.aspect);

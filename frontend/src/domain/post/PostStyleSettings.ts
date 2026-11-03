@@ -1,10 +1,11 @@
 import type { CaptionFooter } from "./CaptionFooter";
+import { ClosingImageList } from "./ClosingImageList";
 import type { FixedHashtags } from "./FixedHashtags";
 import { Hashtag } from "./Hashtag";
 
 /**
  * 投稿の型の設定: 団体ごとの投稿の型の固定の文言・候補（上端の帯の文言・表紙の対象の候補・最後のスライドの定型文・
- * アカウントの紹介・キャプションの定型・固定ハッシュタグ・ロゴ）。AI は書き換えない。版で管理し、版は変更しない。Java の PostStyleSettings と揃える
+ * アカウントの紹介・キャプションの定型・固定ハッシュタグ・ロゴ・最後のスライドの画像）。AI は書き換えない。版で管理し、版は変更しない。Java の PostStyleSettings と揃える
  */
 export class PostStyleSettings {
   private constructor(
@@ -17,17 +18,20 @@ export class PostStyleSettings {
     private readonly footer: CaptionFooter,
     private readonly hashtags: FixedHashtags,
     readonly logoStoragePath: string | undefined,
+    private readonly closing: ClosingImageList,
   ) {}
 
   static of(parts: {
     tenantId: string; version: number; bandText: string; coverTargets: readonly string[]; closingMessage: string;
     accountIntroduction: string; captionFooter: CaptionFooter; fixedHashtags: FixedHashtags; logoStoragePath?: string;
+    closingImages?: ClosingImageList;
   }): PostStyleSettings {
     if (parts.tenantId === "") throw new Error("団体IDは必須です");
     if (!Number.isInteger(parts.version) || parts.version < 1) throw new Error(`版は1以上です: ${parts.version}`);
     if (parts.coverTargets.length < 1) throw new Error("表紙の対象の候補は1件以上必要です");
     return new PostStyleSettings(parts.tenantId, parts.version, parts.bandText, [...parts.coverTargets],
-      parts.closingMessage, parts.accountIntroduction, parts.captionFooter, parts.fixedHashtags, parts.logoStoragePath);
+      parts.closingMessage, parts.accountIntroduction, parts.captionFooter, parts.fixedHashtags, parts.logoStoragePath,
+      parts.closingImages ?? ClosingImageList.empty());
   }
 
   /**
@@ -42,6 +46,11 @@ export class PostStyleSettings {
       captionFooter: input.captionFooter.trim() === "" ? ["キャプションの定型は空にできません"] : [],
       fixedHashtags: input.fixedHashtags.filter((t) => !Hashtag.parse(t)).map((t) => `ハッシュタグの形が正しくありません: ${t}`),
     };
+  }
+
+  /** 最後のスライドの画像（0〜2枚。REQ-007）。renderValues には入れず、最後のスライドの中身として渡す */
+  closingImages(): ClosingImageList {
+    return this.closing;
   }
 
   /** テンプレートに渡す固定の文言（ロゴは保存先を参照名にする） */

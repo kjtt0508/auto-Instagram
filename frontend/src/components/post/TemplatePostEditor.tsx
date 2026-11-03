@@ -273,7 +273,8 @@ export function TemplatePostEditor({ postId, initial, title, chooser }: {
 
       {slides && settings && setup && revision && (
         <fieldset disabled={editing} className="min-w-0">
-          <SlidePreview slides={slides} settings={settings} templateVersion={CURRENT_TEMPLATE_VERSION} selectedIndex={selected} onSelect={setSelected} />
+          {/* 最後のスライドには、保存すると使う最新の設定の版の画像を入れて見せる（REQ-007 BR-007-04） */}
+          <SlidePreview slides={slides.withClosingImagesOf(settings)} settings={settings} templateVersion={CURRENT_TEMPLATE_VERSION} selectedIndex={selected} onSelect={setSelected} />
           <div className="mt-2"><Button variant="tinted" block disabled={!slides.canAddBody()} onClick={addBody}>中のスライドを追加</Button></div>
           {!slides.canAddBody() && <p className="pt-1 text-center text-[13px] text-secondary-label">中のスライドは{SlideList.BODY_MAX}枚までです</p>}
 

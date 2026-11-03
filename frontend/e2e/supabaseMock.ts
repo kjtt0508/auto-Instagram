@@ -8,6 +8,8 @@ export type MockPost = {
   id: string; status: string; scheduledAt?: Date; publishedAt?: Date; failure?: { kind: string; message: string };
   generatedStyle?: "ILLUSTRATION" | "PHOTOREALISTIC"; // 1枚目が生成画像（REQ-005）
   template?: MockTemplate; // テンプレートの投稿（AIで作った投稿。REQ-002）
+  /** REQ-007 より前の承認が記録した過去の投稿の表紙の保存先（承認した投稿だけ。空配列は記録0件）。省略は承認の記録なし */
+  approvalPastPosts?: string[];
 };
 
 /** テンプレートの投稿の版の中身。強調する語は説明文の中の位置（コードポイント）で持つ（DB と同じ） */
@@ -18,6 +20,8 @@ export type MockTemplate = {
     material?: { path: string; style?: "ILLUSTRATION" | "PHOTOREALISTIC" };
   }[];
   hashtags: string[]; generationId?: string; caption?: string;
+  /** この投稿の版が記録した投稿の型の設定の版の、最後のスライドの画像（REQ-007。現在の版とは別に持てる） */
+  recordedClosingImages?: string[];
 };
 export type MockWorld = {
   role: "ADMIN" | "APPROVER" | "EDITOR"; heartbeatMinutesAgo: number; posts: MockPost[];
@@ -26,6 +30,7 @@ export type MockWorld = {
   backgroundPhotos?: { id: string; path: string; description: string; generated?: boolean }[]; // 使っている背景写真（REQ-002）。generated は AI が作った背景（REQ-006。省略は管理者の登録）
   styleOverride?: Record<string, unknown>; // 保存された投稿の型の設定（save_post_style_settings の引数）
   styleLogoPath?: string; // 投稿の型の設定の現在の版のロゴ
+  styleClosingImages?: string[]; // 投稿の型の設定の現在の版の最後のスライドの画像（並べる順。REQ-007）
   styleVersion?: number; // 投稿の型の設定の現在の版（styleSettings が true のとき。既定は 1）
   promptVersions?: { id: string; purpose: "PLAN" | "REVISE"; versionNo: number; body: string }[]; // プロンプト版（REQ-002）
   activePrompts?: Partial<Record<"PLAN" | "REVISE", string>>; // 用途ごとの有効な版の ID
@@ -128,6 +133,7 @@ function administer(name: string, body: Record<string, unknown>, world: MockWorl
     world.styleSettings = true;
     world.styleOverride = body;
     world.styleLogoPath = (body.p_logo_storage_path as string | null) ?? undefined;
+    world.styleClosingImages = (body.p_closing_images as string[] | undefined) ?? [];
     return world.styleVersion;
   }
   return undefined;
@@ -138,6 +144,9 @@ function tableRows(table: string, url: URL, world: MockWorld): unknown[] {
   if (templateRows) return templateRows;
   if (table === "post_style_settings_current") return world.styleSettings ? [styleRow(world)] : [];
   if (table === "post_style_logos") return world.styleLogoPath ? [{ storage_path: world.styleLogoPath }] : [];
+  if (table === "post_style_closing_images") return closingImageRows(url, world);
+  if (table === "post_events") return approvalEventRows(url, world);
+  if (table === "approval_past_posts") return approvalPastPostRows(world);
   if (table === "prompt_versions" || table === "active_prompt_versions") return promptRows(table, url, world);
   if (table === "usable_background_photos") {
     return (world.backgroundPhotos ?? []).map((p) => ({ id: p.id, storage_path: p.path, description: p.description, generated: p.generated ?? false }));
@@ -149,9 +158,30 @@ function tableRows(table: string, url: URL, world: MockWorld): unknown[] {
   if (table === "tenant_settings_current") return [{ pr_label: "【PR】\n" }];
   if (table === "batch_heartbeats") return [{ at: minutesFromNow(-world.heartbeatMinutesAgo).toISOString() }];
   if (table === "post_media_origin") return mediaRows(url, world);
-  if (table === "post_media" || table === "post_events") return [];
+  if (table === "post_media") return [];
   if (table === "post_current") return postRows(url, world);
   return [];
+}
+
+/** 記録した設定の版（style_settings_id=900。テンプレートの投稿の revision_templates が指す）と、現在の版の最後のスライドの画像（REQ-007） */
+const RECORDED_STYLE_ID = 900;
+
+function closingImageRows(url: URL, world: MockWorld): unknown[] {
+  const recorded = url.searchParams.get("style_settings_id") === `eq.${RECORDED_STYLE_ID}`;
+  const paths = recorded ? world.posts.find((p) => p.template)?.template?.recordedClosingImages ?? [] : world.styleClosingImages ?? [];
+  return paths.map((storage_path, i) => ({ position: i + 1, storage_path }));
+}
+
+/** 承認の出来事（APPROVED）。承認の記録を持つ投稿の分だけ返し、履歴の読み取り（絞り込みなし）は空 */
+function approvalEventRows(url: URL, world: MockWorld): unknown[] {
+  if (url.searchParams.get("event_type") !== "eq.APPROVED") return [];
+  const approved = world.posts.find((p) => url.searchParams.get("post_id") === `eq.${p.id}` && p.approvalPastPosts !== undefined);
+  return approved ? [{ id: 7 }] : [];
+}
+
+function approvalPastPostRows(world: MockWorld): unknown[] {
+  const approved = world.posts.find((p) => p.approvalPastPosts !== undefined);
+  return (approved?.approvalPastPosts ?? []).map((cover_storage_path, i) => ({ position: i + 1, past_post_id: `past-${i + 1}`, cover_storage_path }));
 }
 
 function postRows(url: URL, world: MockWorld): unknown[] {
@@ -229,8 +259,8 @@ function templateTableRows(table: string, world: MockWorld): unknown[] | undefin
   const bodyAt = (i: number) => ({ body: t.bodies[i], position: i + 2 });
   const bodies = t.bodies.map((_, i) => bodyAt(i));
   switch (table) {
-    case "revision_templates": return [{ template_version: "niijima@1", style_settings_id: 1 }];
-    case "post_style_settings": return [styleRow(world)];
+    case "revision_templates": return [{ template_version: "niijima@1", style_settings_id: RECORDED_STYLE_ID }];
+    case "post_style_settings": return [{ ...styleRow(world), id: RECORDED_STYLE_ID }];
     case "post_slides": return [
       { id: sid(1), position: 1, role: "COVER" },
       ...bodies.map(({ position }) => ({ id: sid(position), position, role: "BODY" })),

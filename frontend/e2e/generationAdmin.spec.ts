@@ -177,6 +177,7 @@ test("BR-002-17 投稿の型の設定を直して保存すると、新しい版�
     p_band_text: "同志社生向けSNSメディア", p_cover_targets: ["同志社大学", "同志社大生"],
     p_closing_message: "ご覧いただきありがとうございます", p_account_introduction: "@niijima_info\n学生生活を発信中",
     p_caption_footer: "──────\n新島info", p_fixed_hashtags: ["#同志社大学", "#同志社"], p_logo_storage_path: null,
+    p_closing_images: [],
   });
   await expect(page.getByText("いまの版: 版2。保存すると版3になります")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "上端の帯の文言" })).toHaveValue("同志社生向けSNSメディア");
@@ -225,6 +226,141 @@ test("BR-002-17 ロゴは保存した版から引き継がれ、「ロゴを外�
   await page.getByRole("button", { name: "新しい版として保存" }).click();
   await expect(page.getByRole("status")).toContainText("版3として保存しました");
   expect(rpcLog.filter((c) => c.name === "save_post_style_settings").at(-1)?.body.p_logo_storage_path).toBeNull();
+});
+
+// ───────── S-15 最後のスライドの画像（REQ-007） ─────────
+
+const addClosing = (page: Page, file: { name: string; mimeType: string; buffer: Buffer }) =>
+  page.getByLabel("最後のスライドの画像を追加").setInputFiles(file);
+const closingImage = (page: Page, n: number) => page.getByRole("img", { name: `最後のスライドの画像 ${n}枚目` });
+const closingAlert = (page: Page) => page.getByRole("region", { name: "最後のスライドの画像" }).getByRole("alert");
+const saveCalls = (rpcLog: { name: string; body: Record<string, unknown> }[]) => rpcLog.filter((c) => c.name === "save_post_style_settings");
+const SAVE_BUTTON = "新しい版として保存";
+
+test("AC-007-01 最後のスライドの画像を2枚アップロードして保存すると、4:5 の中央を切り抜いた 800×1000 の JPEG が style/ に置かれ、並べる順に送られる。3枚目は追加できない", async ({ page }) => {
+  const { rpcLog, uploads } = await useMockSupabase(page, world());
+  await page.goto("/settings/style/");
+  await expect(page.getByRole("region", { name: "最後のスライドの画像" })).toBeVisible();
+  await expect(closingImage(page, 1)).toHaveCount(0);
+
+  await addClosing(page, { name: "wide.png", mimeType: "image/png", buffer: solidPng(2000, 1000) });
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalWidth", 800);
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalHeight", 1000);
+  await addClosing(page, { name: "tall.png", mimeType: "image/png", buffer: solidPng(900, 1200) });
+  await expect(closingImage(page, 2)).toHaveJSProperty("naturalWidth", 800);
+  await expect(closingImage(page, 2)).toHaveJSProperty("naturalHeight", 1000);
+  await expect(page.getByLabel("最後のスライドの画像を追加")).toHaveCount(0);   // 2枚あるので3枚目は追加できない
+  await expect(page.getByRole("region", { name: "最後のスライドの画像" })).toContainText("最大2枚。縦500px・横400px 以上の PNG か JPEG");
+
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版2として保存しました");
+  await expect(page.getByRole("status")).toContainText("保存済みの下書き・承認を依頼した投稿・承認した投稿は、保存し直すまで前の版のままです");
+  expect(uploads).toHaveLength(2);
+  for (const path of uploads) expect(path).toMatch(/^t1\/style\/[0-9a-f-]{36}\.jpg$/);
+  expect(saveCalls(rpcLog)).toHaveLength(1);
+  expect(saveCalls(rpcLog)[0].body.p_closing_images).toEqual(uploads);
+  expect(await hasNoHorizontalScroll(page)).toBe(true);
+});
+
+test("AC-007-02 400×500 はそのまま受け付け、399×500・400×499・1000×300（切り抜くと 240×300）は理由を出して入れない", async ({ page }) => {
+  const { rpcLog, uploads } = await useMockSupabase(page, world());
+  await page.goto("/settings/style/");
+
+  for (const [width, height] of [[399, 500], [400, 499], [1000, 300]]) {
+    await addClosing(page, { name: `small-${width}x${height}.png`, mimeType: "image/png", buffer: solidPng(width, height) });
+    await expect(closingAlert(page)).toHaveText("縦500px・横400px 以上の画像を選んでください");
+    await expect(closingImage(page, 1)).toHaveCount(0);
+  }
+  expect(await hasNoHorizontalScroll(page)).toBe(true);
+
+  await addClosing(page, { name: "exact.png", mimeType: "image/png", buffer: solidPng(400, 500) });
+  await expect(closingAlert(page)).toHaveCount(0);
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalWidth", 400);
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalHeight", 500);
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版2として保存しました");
+  expect(uploads).toHaveLength(1);
+  expect(saveCalls(rpcLog)[0].body.p_closing_images).toEqual(uploads);
+});
+
+test("AC-007-03 GIF と PDF は「PNG か JPEG を選んでください」と表示して入れず、設定は変わらない。壊れた画像は読み込めない理由を出す", async ({ page }) => {
+  const { rpcLog, uploads } = await useMockSupabase(page, world());
+  await page.goto("/settings/style/");
+  await expect(page.getByLabel("最後のスライドの画像を追加")).toHaveAttribute("accept", "image/png,image/jpeg");
+
+  for (const [name, mimeType] of [["a.gif", "image/gif"], ["a.pdf", "application/pdf"]]) {
+    await addClosing(page, { name, mimeType, buffer: Buffer.from("not an image") });
+    await expect(closingAlert(page)).toHaveText("PNG か JPEG を選んでください");
+    await expect(closingImage(page, 1)).toHaveCount(0);
+  }
+  await addClosing(page, { name: "broken.png", mimeType: "image/png", buffer: Buffer.from("not an image") });
+  await expect(closingAlert(page)).toHaveText("画像を読み込めませんでした。PNG か JPEG を選び直してください");
+  expect(saveCalls(rpcLog)).toHaveLength(0);
+  expect(uploads).toHaveLength(0);
+});
+
+const RECORDED = ["t1/style/A.jpg", "t1/style/B.jpg"];
+const REPLACEMENT = { name: "c.png", mimeType: "image/png", buffer: solidPng(800, 1000) };
+
+test("AC-007-04 保存した2枚（A・B）の1枚目を外して [B]、選び直して [C]、外して [] の版を順に保存でき、Storage の画像を消す呼び出しをしない", async ({ page }) => {
+  const calls: string[] = [];
+  page.on("request", (r) => { if (r.method() === "DELETE" || r.url().includes("/object/remove")) calls.push(r.url()); });
+  const { rpcLog, uploads } = await useMockSupabase(page, world({ styleClosingImages: RECORDED }));
+  await page.goto("/settings/style/");
+  await expect(closingImage(page, 1)).toBeVisible();
+  await expect(closingImage(page, 2)).toBeVisible();
+  await expect(page.getByLabel("最後のスライドの画像を追加")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "1枚目を外す" }).click();
+  await expect(closingImage(page, 2)).toHaveCount(0);                              // 間を空けず、2枚目が1枚目になる
+  await expect(page.getByLabel("最後のスライドの画像を追加")).toBeVisible();      // 空きができた
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版2として保存しました");
+  expect(saveCalls(rpcLog).at(-1)?.body.p_closing_images).toEqual(["t1/style/B.jpg"]);
+
+  await page.getByLabel("1枚目を選び直す").setInputFiles(REPLACEMENT);
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalWidth", 800);
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版3として保存しました");
+  expect(uploads).toHaveLength(1);
+  expect(saveCalls(rpcLog).at(-1)?.body.p_closing_images).toEqual([uploads[0]]);   // [B] の1枚目を選び直したので [C]
+
+  await page.getByRole("button", { name: "1枚目を外す" }).click();
+  await expect(closingImage(page, 1)).toHaveCount(0);
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版4として保存しました");
+  expect(saveCalls(rpcLog).at(-1)?.body.p_closing_images).toEqual([]);
+  expect(calls).toEqual([]);
+});
+
+test("AC-007-04 2枚（A・B）の1枚目を選び直して保存すると [C, B]、2枚とも外して保存すると 0枚の版になる", async ({ page }) => {
+  const { rpcLog, uploads } = await useMockSupabase(page, world({ styleClosingImages: RECORDED }));
+  await page.goto("/settings/style/");
+  await expect(closingImage(page, 2)).toBeVisible();
+  await page.getByLabel("1枚目を選び直す").setInputFiles(REPLACEMENT);
+  await expect(closingImage(page, 1)).toHaveJSProperty("naturalWidth", 800);
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版2として保存しました");
+  expect(saveCalls(rpcLog)[0].body.p_closing_images).toEqual([uploads[0], "t1/style/B.jpg"]);
+
+  await page.getByRole("button", { name: "2枚目を外す" }).click();
+  await page.getByRole("button", { name: "1枚目を外す" }).click();
+  await expect(closingImage(page, 1)).toHaveCount(0);
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版3として保存しました");
+  expect(saveCalls(rpcLog)[1].body.p_closing_images).toEqual([]);
+});
+
+test("AC-007-04 選んで外した画像は Storage に置かれない（置くのは保存のときだけ）", async ({ page }) => {
+  const { rpcLog, uploads } = await useMockSupabase(page, world());
+  await page.goto("/settings/style/");
+  await addClosing(page, { name: "a.png", mimeType: "image/png", buffer: solidPng(800, 1000) });
+  await expect(closingImage(page, 1)).toBeVisible();
+  await page.getByRole("button", { name: "1枚目を外す" }).click();
+  await page.getByRole("button", { name: SAVE_BUTTON }).click();
+  await expect(page.getByRole("status")).toContainText("版2として保存しました");
+  expect(uploads).toEqual([]);
+  expect(saveCalls(rpcLog)[0].body.p_closing_images).toEqual([]);
 });
 
 // ───────── S-10 プロンプト版 ─────────

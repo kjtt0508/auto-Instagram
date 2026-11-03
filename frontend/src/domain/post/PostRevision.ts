@@ -12,7 +12,7 @@ import { RevisionContent } from "./RevisionContent";
  * 投稿の版: 投稿の内容の1つの版。投稿の版の中身（写真の投稿は投稿画像一覧、テンプレートの投稿はスライド構成・テンプレートの版・
  * 投稿の型の設定の版・追加のハッシュタグ）と、キャプション・PR区分。形ごとの違いは中身に委ね、ここでは分岐しない。
  * 版は変更しない（変えるときは新しい版を作る）。記録から戻すときは中身を検査しない（violationsForApproval で承認依頼の前に出す）。
- * 最後のスライドの過去の投稿は持たない（承認の出来事で決まり、画像化のときに SlideList.withPastPosts で渡す）。
+ * 最後のスライドに並べる画像は持たない（使う投稿の型の設定の版の最後のスライドの画像で決まり、プレビュー・画像化のときに SlideList.withClosing で渡す。REQ-007）。
  * Java の PostRevision と揃える
  */
 export class PostRevision {

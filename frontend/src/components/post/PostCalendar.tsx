@@ -80,7 +80,7 @@ function CalendarEntry({ post, role, onChanged }: { post: Post; role: Role; onCh
       {failure && (
         <div className="space-y-2 px-4 pb-3">
           <p className="text-[13px] text-destructive">{failure.message}</p>
-          <p className="text-[13px] text-secondary-label">{failure.guidance()}</p>
+          {failure.guidanceToShow() && <p className="text-[13px] text-secondary-label">{failure.guidanceToShow()}</p>}
           {post.canRetry(role) && <RetryForm postId={post.id} onDone={onChanged} />}
         </div>
       )}

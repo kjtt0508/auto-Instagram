@@ -20,6 +20,8 @@ export async function retireBackgroundPhoto(id: string): Promise<void> {
 export type StyleSettingsInput = {
   bandText: string; coverTargets: readonly string[]; closingMessage: string; accountIntroduction: string;
   captionFooter: string; fixedHashtags: readonly string[]; logoStoragePath?: string;
+  /** 最後のスライドの画像の保存先（並べる順。0〜2枚。REQ-007） */
+  closingImages: readonly string[];
 };
 
 /** 投稿の型の設定を新しい版として保存する。戻り値は新しい版の番号。入力は PostStyleSettings.violationsOfInput で検査済みの前提 */
@@ -28,6 +30,7 @@ export async function saveStyleSettings(input: StyleSettingsInput): Promise<numb
     p_band_text: input.bandText, p_cover_targets: [...input.coverTargets], p_closing_message: input.closingMessage,
     p_account_introduction: input.accountIntroduction, p_caption_footer: CaptionFooter.of(input.captionFooter).text,
     p_fixed_hashtags: FixedHashtags.of(input.fixedHashtags).texts(), p_logo_storage_path: input.logoStoragePath ?? null,
+    p_closing_images: [...input.closingImages],
   }));
   return Number(data);
 }

@@ -23,8 +23,8 @@ public record BodyContent(SlideText text, Optional<MaterialImage> material) impl
 	}
 
 	@Override
-	public List<String> imageRefs() {
-		return material.map(m -> List.of(m.storagePath())).orElse(List.of());
+	public List<RenderImageNeed> imageNeeds() {
+		return material.map(m -> List.of(RenderImageNeed.of(m.storagePath()))).orElse(List.of());
 	}
 
 	/** 写真風の生成画像を含むか（素材画像に委ねる） */

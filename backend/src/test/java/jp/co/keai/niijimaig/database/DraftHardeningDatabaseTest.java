@@ -3,7 +3,6 @@ package jp.co.keai.niijimaig.database;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -18,7 +17,7 @@ import org.springframework.test.context.ActiveProfiles;
 import jp.co.keai.niijimaig.TestcontainersConfiguration;
 import jp.co.keai.niijimaig.support.SupabaseFixture.LoggedIn;
 
-/** V10 のレビュー指摘の修正を DB で確かめる（REQ-002 設計 4・5章）: 権限・差し込み値・生成の記録の整合・承認の出来事・過去の投稿の選び方・保存の形 */
+/** V10 のレビュー指摘の修正を DB で確かめる（REQ-002 設計 4・5章）: 権限・差し込み値・生成の記録の整合・承認の出来事・過去の投稿を選ばないこと（REQ-007）・保存の形 */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @ActiveProfiles("test")
@@ -38,13 +37,13 @@ class DraftHardeningDatabaseTest extends DraftDatabaseSupport {
 	}
 
 	@Test
-	@DisplayName("NFR-001-05 anon（ログインしていない人）は、REQ-002 の新しい表・ビューを読めず、新しい RPC も使えない")
+	@DisplayName("NFR-001-05 NFR-007-02 anon（ログインしていない人）は、REQ-002 の新しい表・ビュー（最後のスライドの画像を含む）を読めず、新しい RPC も使えない")
 	void anonCannotUseNewTablesViewsOrRpcs() {
 		List<String> relations = List.of("ideas", "prompt_versions", "prompt_activations", "generations", "generation_attempts", "generation_results",
 				"generation_revisions", "post_style_settings", "post_style_logos", "background_photos", "background_photo_retirements", "template_releases",
 				"revision_templates", "revision_generations", "post_slides", "cover_slides", "cover_backgrounds", "body_slides", "body_emphases",
 				"body_materials", "material_adoptions", "revision_hashtags", "approval_past_posts", "template_renders", "template_publish_media",
-				"active_prompt_versions", "post_style_settings_current", "usable_background_photos", "revision_generated_styles");
+				"post_style_closing_images", "active_prompt_versions", "post_style_settings_current", "usable_background_photos", "revision_generated_styles");
 		for (String relation : relations) {
 			assertRejected(() -> asAnon(j -> j.queryForObject("select count(*) from " + relation, Integer.class)), "42501", "permission denied");
 		}
@@ -201,30 +200,11 @@ class DraftHardeningDatabaseTest extends DraftDatabaseSupport {
 	// ───────── 過去の投稿 ─────────
 
 	@Test
-	@DisplayName("AC-002-15 表紙の無い過去の投稿（画像化の記録が無い）は飛ばして、その次に新しい投稿を選ぶ。表紙のある投稿が2件見つかったら止める")
-	void pastPostsWithoutCoverAreSkipped() {
+	@DisplayName("AC-007-08 表紙の無い公開済みの投稿（画像化の記録が無い）があっても、承認は過去の投稿を選ばず記録しない")
+	void publishedPostWithoutCoverIsNotRecorded() {
 		configureStyle();
-		UUID older = publishedUploadPost(BASE);
-		UUID old = publishedUploadPost(BASE.plus(1, ChronoUnit.DAYS));
-		UUID oldest = publishedUploadPost(BASE.minus(1, ChronoUnit.DAYS));
 		UUID noRender = save(editor, simpleTemplate());
 		approve(noRender);                                                    // 画像化の記録を残さないまま公開済みにする（表紙が無い）
-		publish(noRender, BASE.plus(3, ChronoUnit.DAYS));
-		UUID target = save(editor, simpleTemplate());
-
-		long event = approve(target);
-
-		assertThat(pastPosts(event)).extracting(p -> p.get("past_post_id")).containsExactly(old, older);
-		assertThat(pastPosts(event)).extracting(p -> p.get("position")).containsExactly(1, 2);
-		assertThat(pastPosts(event)).extracting(p -> p.get("past_post_id")).doesNotContain(noRender, oldest);
-	}
-
-	@Test
-	@DisplayName("AC-002-15 公開済みの投稿がすべて表紙の無い投稿なら、過去の投稿は記録されない")
-	void noPastPostsWhenNoneHasCover() {
-		configureStyle();
-		UUID noRender = save(editor, simpleTemplate());
-		approve(noRender);
 		publish(noRender, BASE);
 		UUID target = save(editor, simpleTemplate());
 

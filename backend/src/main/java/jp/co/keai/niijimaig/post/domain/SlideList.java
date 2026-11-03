@@ -74,10 +74,10 @@ public final class SlideList {
 		return slides.stream().anyMatch(Slide::needsApprovalCheck);
 	}
 
-	/** 画像化のとき、承認で選んだ過去の投稿の表紙を最後のスライドに載せた新しい構成 */
-	public SlideList withPastPosts(List<PastPostCover> covers) {
+	/** 最後のスライドの中身を差し替えた新しい構成（画像化のとき、並べる画像を入れる。どの画像を並べるかは呼び出し側が ClosingContent で決める） */
+	public SlideList withClosing(ClosingContent closing) {
 		List<Slide> replaced = new ArrayList<>(slides.subList(0, slides.size() - 1));
-		replaced.add(new Slide(new ClosingContent(covers)));
+		replaced.add(new Slide(closing));
 		return of(replaced);
 	}
 

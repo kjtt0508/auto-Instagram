@@ -37,6 +37,8 @@ import jp.co.keai.niijimaig.post.domain.BodyContent;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.CaptionFooter;
 import jp.co.keai.niijimaig.post.domain.ClosingContent;
+import jp.co.keai.niijimaig.post.domain.ClosingImage;
+import jp.co.keai.niijimaig.post.domain.ClosingImageList;
 import jp.co.keai.niijimaig.post.domain.CoverContent;
 import jp.co.keai.niijimaig.post.domain.CoverText;
 import jp.co.keai.niijimaig.post.domain.FailureKind;
@@ -72,6 +74,11 @@ class TemplateRenderingTest {
 	long approval = 77;
 	String background = tenant + "/backgrounds/bg.jpg";
 	String pastCover = tenant + "/renders/5/1.jpg";
+	String closing1 = tenant + "/style/c1.jpg";
+	String closing2 = tenant + "/style/c2.jpg";
+	/** 投稿の版が使った設定の最後のスライドの画像・ロゴ（scheduledPost が使う。変えるときは投稿を作り直す） */
+	List<String> closingImagePaths = List.of();
+	String logoPath;
 
 	MovableClock clock = new MovableClock(NOW);
 	FakeRecords records = new FakeRecords();
@@ -177,8 +184,51 @@ class TemplateRenderingTest {
 		run(claimed(1));
 
 		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
-		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED));
+		assertThat(posts.failures).singleElement().satisfies(f -> {
+			assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED);
+			assertThat(f.message()).isEqualTo("画像化に失敗しました。今すぐ再実行でやり直せます（画像化に必要な画像が見つかりません）");
+		});
 		assertThat(renderer.calls).isEmpty();
+	}
+
+	@Test
+	@DisplayName("AC-007-13 最後のスライドの画像が Storage に見つからないときは、再試行せずに画像化の失敗にし、理由は最後のスライドの画像のもの")
+	void missingClosingImageFailsWithItsOwnReason() {
+		closingImagePaths = List.of(closing1, closing2);
+		posts.post = scheduledPost(PostStatus.SCHEDULED);
+		records.past = List.of();
+		storage.objects.put(closing1, new byte[] {3});
+
+		run(claimed(1));
+
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.FAILED);
+		assertThat(posts.failures).singleElement().satisfies(f -> {
+			assertThat(f.kind()).isEqualTo(FailureKind.RENDER_FAILED);
+			// 再実行では直らないので、画像化の失敗の案内（今すぐ再実行…）は付けず、BR-007-06 の文だけを表示する
+			assertThat(f.message()).isEqualTo("最後のスライドの画像が見つかりません。管理者が画像を設定し直したあと、下書きに戻して保存し直してください");
+		});
+		assertThat(jobs.finished.get(0).outcome.errorKind()).isEqualTo("RENDER_FAILED");
+	}
+
+	@Test
+	@DisplayName("AC-007-13 過去の投稿の表紙（改修前の承認の記録）・ロゴが見つからないときの理由は、今までの文言のまま")
+	void missingPastCoverAndLogoKeepTheDefaultReason() {
+		storage.objects.remove(pastCover);
+
+		run(claimed(1));
+
+		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.message())
+				.isEqualTo("画像化に失敗しました。今すぐ再実行でやり直せます（画像化に必要な画像が見つかりません）"));
+
+		posts.failures.clear();
+		storage.objects.put(pastCover, new byte[] {2});
+		logoPath = tenant + "/style/logo.png";
+		posts.post = scheduledPost(PostStatus.SCHEDULED);
+
+		run(claimed(1));
+
+		assertThat(posts.failures).singleElement().satisfies(f -> assertThat(f.message())
+				.isEqualTo("画像化に失敗しました。今すぐ再実行でやり直せます（画像化に必要な画像が見つかりません）"));
 	}
 
 	@Test
@@ -236,8 +286,12 @@ class TemplateRenderingTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-15 画像は、そのスライドが使うものだけをテンプレートに渡す（表紙は背景写真、最後は過去の投稿の表紙）")
+	@DisplayName("AC-007-09 AC-002-15 画像は、そのスライドが使うものだけをテンプレートに渡す（表紙は背景写真、最後は改修前の承認が記録した過去の投稿の表紙。設定の画像があっても記録が勝つ）")
 	void imagesArePassedPerSlide() {
+		closingImagePaths = List.of(closing1, closing2);
+		posts.post = scheduledPost(PostStatus.SCHEDULED);
+		storage.objects.put(closing1, new byte[] {3});
+		storage.objects.put(closing2, new byte[] {4});
 		for (int i = 0; i < 3; i++) {
 			renderer.script.add(() -> jpeg(1080, 1350));
 		}
@@ -248,6 +302,41 @@ class TemplateRenderingTest {
 		assertThat(imageKeys(0)).containsExactly(background);
 		assertThat(imageKeys(1)).isEmpty();
 		assertThat(imageKeys(2)).containsExactly(pastCover);
+	}
+
+	@Test
+	@DisplayName("AC-007-05 承認の記録が0件なら、最後のスライドには投稿の版が使った設定の最後のスライドの画像を、並べる順にテンプレートに渡す")
+	void closingImagesOfSettingsArePassed() {
+		closingImagePaths = List.of(closing1, closing2);
+		posts.post = scheduledPost(PostStatus.SCHEDULED);
+		records.past = List.of();
+		storage.objects.put(closing1, new byte[] {3});
+		storage.objects.put(closing2, new byte[] {4});
+		for (int i = 0; i < 3; i++) {
+			renderer.script.add(() -> jpeg(1080, 1350));
+		}
+
+		run(claimed(1));
+
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(imageKeys(2)).containsExactly(closing1, closing2);
+		@SuppressWarnings("unchecked")
+		Map<String, Object> closingSlide = (Map<String, Object>) renderer.calls.get(2).get("slide");
+		assertThat(closingSlide).containsEntry("role", "CLOSING").containsEntry("pastPosts", List.of(closing1, closing2));
+	}
+
+	@Test
+	@DisplayName("AC-007-09 改修前の承認で記録が0件、設定の版にも画像が無いときは、最後のスライドに画像の欄なしで描く（設定の画像には変えない）")
+	void noRecordsAndNoClosingImagesDrawsWithoutImages() {
+		records.past = List.of();
+		for (int i = 0; i < 3; i++) {
+			renderer.script.add(() -> jpeg(1080, 1350));
+		}
+
+		run(claimed(1));
+
+		assertThat(jobs.finished.get(0).next.status()).isEqualTo(JobStatus.SUCCEEDED);
+		assertThat(imageKeys(2)).isEmpty();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -429,7 +518,8 @@ class TemplateRenderingTest {
 
 	private Post scheduledPost(PostStatus status) {
 		PostStyleSettings settings = new PostStyleSettings(tenant, 1, "新島info", List.of("同志社大学"), "ありがとうございます", "@niijima_info",
-				new CaptionFooter("定型の文面"), new FixedHashtags(List.of("#固定")), Optional.empty());
+				new CaptionFooter("定型の文面"), new FixedHashtags(List.of("#固定")), Optional.ofNullable(logoPath),
+				ClosingImageList.restore(closingImagePaths.stream().map(ClosingImage::restore).toList()));
 		List<Slide> slides = List.of(
 				new Slide(new CoverContent(CoverText.restore(new CoverText.Parts("同志社大学", "期末試験", "", "まとめたよ", "RED")),
 						Optional.of(new CoverContent.Background(UUID.randomUUID(), background)))),

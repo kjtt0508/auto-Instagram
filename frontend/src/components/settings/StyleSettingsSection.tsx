@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/session/SessionGate";
 import { Button } from "@/components/ui/Button";
 import { Cell, GroupedSection } from "@/components/ui/Grouped";
+import { ClosingImageList } from "@/domain/post/ClosingImageList";
 import { PostStyleSettings } from "@/domain/post/PostStyleSettings";
 import { saveStyleSettings } from "@/lib/api/generationAdministration";
 import { uploadStyleLogo, viewUrls } from "@/lib/api/mediaStorage";
 import { currentStyleSettings } from "@/lib/api/styleRepository";
 import { convertLogo } from "@/lib/image/imageConversion";
 import { FORM_INPUT, FormField } from "./AdminPage";
+import { ClosingImagesGroup } from "./ClosingImagesGroup";
+import { useClosingImages } from "./useClosingImages";
 
 const TARGET_SEPARATOR = /[、,，\n]/u;
 const HASHTAG_SEPARATOR = /\s+/u;
@@ -56,6 +59,7 @@ function StyleForm({ current, justSaved, onSaved }: {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<number | null>(justSaved);
   const edit = (patch: Partial<Form>) => { setForm({ ...form, ...patch }); setSaved(null); };
+  const closing = useClosingImages(current?.closingImages() ?? ClosingImageList.empty(), tenant, () => setSaved(null));
 
   useEffect(() => {
     if (!form.logoStoragePath) return;
@@ -88,7 +92,8 @@ function StyleForm({ current, justSaved, onSaved }: {
     setError(null);
     try {
       const logoStoragePath = newLogo ? await uploadStyleLogo(tenant, newLogo.blob) : form.logoStoragePath;
-      const version = await saveStyleSettings({ ...form, coverTargets: targets, fixedHashtags: hashtags, logoStoragePath });
+      const closingImages = await closing.upload();
+      const version = await saveStyleSettings({ ...form, coverTargets: targets, fixedHashtags: hashtags, logoStoragePath, closingImages });
       onSaved(await currentStyleSettings(), version);
     } catch (e) {
       setError((e as Error).message);
@@ -102,7 +107,7 @@ function StyleForm({ current, justSaved, onSaved }: {
   return (
     <>
       <GroupedSection title="表紙・最後のスライド" label="表紙・最後のスライド"
-        footer="上端の帯の文言は表紙の上端に出ます。最後のスライドには、定型文・過去の投稿2件・アカウントの紹介が並びます">
+        footer="上端の帯の文言は表紙の上端に出ます。最後のスライドには、定型文・最後のスライドの画像・アカウントの紹介が並びます">
         <FormField label="上端の帯の文言">
           <input aria-label="上端の帯の文言" value={form.bandText} onChange={(e) => edit({ bandText: e.target.value })} className={FORM_INPUT} />
         </FormField>
@@ -145,12 +150,14 @@ function StyleForm({ current, justSaved, onSaved }: {
         )}
       </GroupedSection>
 
+      <ClosingImagesGroup images={closing} busy={busy} />
+
       <div className="mt-6">
         {error && <p role="alert" className="px-4 pb-2 text-[13px] text-destructive">{error}</p>}
         {saved !== null && (
-          <p role="status" className="px-4 pb-2 text-[15px] text-success">版{saved}として保存しました。承認済みの投稿は、承認したときの版のままです</p>
+          <p role="status" className="px-4 pb-2 text-[15px] text-success">版{saved}として保存しました。保存済みの下書き・承認を依頼した投稿・承認した投稿は、保存し直すまで前の版のままです</p>
         )}
-        <Button variant="filled" block disabled={busy} onClick={save}>{busy ? "保存しています…" : "新しい版として保存"}</Button>
+        <Button variant="filled" block disabled={busy || closing.converting} onClick={save}>{busy ? "保存しています…" : "新しい版として保存"}</Button>
         <p className="px-4 pt-1.5 text-[13px] text-secondary-label">
           {current ? `いまの版: 版${current.version}。保存すると版${current.version + 1}になります` : "まだ設定されていません。保存すると版1になります"}
         </p>

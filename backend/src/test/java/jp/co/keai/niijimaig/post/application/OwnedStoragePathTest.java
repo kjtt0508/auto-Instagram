@@ -10,6 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import jp.co.keai.niijimaig.post.domain.ClosingContent;
+import jp.co.keai.niijimaig.post.domain.RenderImageNeed;
+
 /** 画像化が読み書きする保存先の規則（団体の置き場所の中だけ）。AC-002-23 */
 class OwnedStoragePathTest {
 
@@ -63,9 +66,34 @@ class OwnedStoragePathTest {
 		};
 		RenderImages images = new RenderImages(storage, tenant);
 
-		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(other + "/posts/a.jpg"))).isInstanceOf(RenderFailedException.class);
-		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(tenant + "/posts/../x/a.jpg"))).isInstanceOf(RenderFailedException.class);
+		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(RenderImageNeed.of(other + "/posts/a.jpg")))).isInstanceOf(RenderFailedException.class);
+		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(RenderImageNeed.of(tenant + "/posts/../x/a.jpg")))).isInstanceOf(RenderFailedException.class);
 		assertThat(reads).hasValue(0);
-		assertThat(images.dataUrls(java.util.List.of(tenant + "/posts/a.jpg")).get(tenant + "/posts/a.jpg").toString()).startsWith("data:image/jpeg;base64,");
+		assertThat(images.dataUrls(java.util.List.of(RenderImageNeed.of(tenant + "/posts/a.jpg"))).get(tenant + "/posts/a.jpg").toString())
+				.startsWith("data:image/jpeg;base64,");
+	}
+
+	@Test
+	@DisplayName("AC-007-13 画像が Storage に無いときは、渡された理由でそのまま画像化の失敗にする（参照の形で理由を変えない）")
+	void renderImagesFailWithTheGivenReason() {
+		RenderStorage empty = new RenderStorage() {
+			@Override
+			public Optional<byte[]> read(UUID tenantId, String privatePath) {
+				return Optional.empty();
+			}
+
+			@Override
+			public void save(UUID tenantId, String privatePath, byte[] jpeg) {
+			}
+		};
+		RenderImages images = new RenderImages(empty, tenant);
+		String path = tenant + "/style/c1.jpg";
+
+		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(RenderImageNeed.notFixableByRerun(path, ClosingContent.MISSING_CLOSING_IMAGE_DETAIL))))
+				.isInstanceOfSatisfying(RenderFailedException.class, e -> assertThat(e.fixableByRerun()).isFalse())
+				.hasMessage("最後のスライドの画像が見つかりません。管理者が画像を設定し直したあと、下書きに戻して保存し直してください");
+		assertThatThrownBy(() -> images.dataUrls(java.util.List.of(RenderImageNeed.of(path))))
+				.isInstanceOfSatisfying(RenderFailedException.class, e -> assertThat(e.fixableByRerun()).isTrue())
+				.hasMessage("画像化に必要な画像が見つかりません");
 	}
 }

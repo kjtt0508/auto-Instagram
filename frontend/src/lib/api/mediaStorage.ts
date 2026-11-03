@@ -39,6 +39,16 @@ export function uploadStyleLogo(tenant: Tenant, png: Blob): Promise<string> {
   return uploadTo(tenant.logoPathFor(newFileId()), png, "image/png");
 }
 
+/** 最後のスライドの画像のアップロード先を決める（uploads-private/{団体}/style/{uuid}.jpg。置くのは保存のとき）。REQ-007 */
+export function newClosingImagePath(tenant: Tenant): string {
+  return tenant.closingImagePathFor(newFileId());
+}
+
+/** 変換済みの JPEG を最後のスライドの画像の保存先（管理者だけが書ける。newClosingImagePath で決めたパス）に保存し、パスを返す */
+export function uploadStyleClosingImage(path: string, jpeg: Blob): Promise<string> {
+  return uploadTo(path, jpeg, "image/jpeg");
+}
+
 /** 画面に表示するための期限付き URL（保存先のパス → URL） */
 export async function viewUrls(paths: readonly string[]): Promise<Map<string, string>> {
   if (paths.length === 0) return new Map();

@@ -42,6 +42,35 @@ test("AC-001-22 投稿カレンダーは状態ごとに色分けされ、失敗�
   await expect(failed.getByRole("button", { name: "今すぐ再実行" })).toBeVisible();
 });
 
+const RERUN_GUIDANCE = "今すぐ再実行でやり直せます";
+const MISSING_IMAGE = "最後のスライドの画像が見つかりません。管理者が画像を設定し直したあと、下書きに戻して保存し直してください";
+const renderFailed = (message: string) => world({ posts: [
+  { id: "render", status: "FAILED", scheduledAt: minutesFromNow(-30), failure: { kind: "RENDER_FAILED", message } }] });
+
+test("AC-007-13 最後のスライドの画像が無い画像化の失敗は、説明の文だけを出し「今すぐ再実行でやり直せます」は出さない（カレンダー・S-04）", async ({ page }) => {
+  await useMockSupabase(page, renderFailed(MISSING_IMAGE));
+  await page.goto("/");
+  const failed = page.getByRole("region", { name: "投稿カレンダー" }).locator('[data-post-id="render"]');
+  await expect(failed).toContainText(MISSING_IMAGE);
+  await expect(failed).not.toContainText(RERUN_GUIDANCE);
+  await expect(failed.getByRole("button", { name: "今すぐ再実行" })).toBeVisible();   // 再実行のボタンは状態とロールで決まる
+
+  await page.goto("/posts/view/?id=render");
+  await expect(page.getByText(MISSING_IMAGE)).toBeVisible();
+  await expect(page.getByText(RERUN_GUIDANCE)).toHaveCount(0);
+});
+
+test("AC-006-14 再実行で直る画像化の失敗は、説明に含まれる案内が1回だけ出る（カレンダー・S-04）", async ({ page }) => {
+  await useMockSupabase(page, renderFailed(`画像化に失敗しました。${RERUN_GUIDANCE}（背景の画像化に失敗）`));
+  await page.goto("/");
+  const failed = page.getByRole("region", { name: "投稿カレンダー" }).locator('[data-post-id="render"]');
+  await expect(failed).toContainText(RERUN_GUIDANCE);
+  expect(((await failed.textContent()) ?? "").split(RERUN_GUIDANCE)).toHaveLength(2);
+
+  await page.goto("/posts/view/?id=render");
+  await expect(page.getByText(RERUN_GUIDANCE)).toHaveCount(1);
+});
+
 test("AC-001-18 失敗した投稿を「今すぐ再実行」すると retry_post が呼ばれる", async ({ page }) => {
   const { rpcCalls } = await useMockSupabase(page, world());
   await page.goto("/");

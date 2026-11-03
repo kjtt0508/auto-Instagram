@@ -415,7 +415,7 @@ test("AC-002-12 説明文の前に絵文字を足してから保存すると、�
   expect(saved[0].p_revision.slides[1].emphases).toEqual([{ start: 2, length: 2 }]);
 });
 
-test("AC-002-19 AC-002-02 S-04 テンプレートの投稿の詳細: スライドのプレビュー・最後のスライドの注記・公開用キャプション、写真風の素材画像で承認時の確認が出る", async ({ page }) => {
+test("AC-002-19 AC-002-02 S-04 テンプレートの投稿の詳細: スライドのプレビュー・公開用キャプション、写真風の素材画像で承認時の確認が出る", async ({ page }) => {
   await allowTemplateFonts(page);
   const photoreal = { ...SAVED_TEMPLATE, bodies: [{ ...SAVED_TEMPLATE.bodies[0], material: { path: "t1/posts/m1.jpg", style: "PHOTOREALISTIC" as const } }, SAVED_TEMPLATE.bodies[1]] };
   await mockSupabase(page, { ...WORLD, role: "APPROVER", posts: [{ id: "tp2", status: "AWAITING_APPROVAL", template: photoreal }] });
@@ -423,7 +423,7 @@ test("AC-002-19 AC-002-02 S-04 テンプレートの投稿の詳細: スライ�
 
   await expect(page.getByRole("list", { name: "スライドのプレビュー" })).toBeVisible();
   await expectAllRendered(page, 4);   // 表紙・中2・最後のスライド
-  await expect(page.getByText("過去の投稿は承認した時点の新しい2件が入ります")).toBeVisible();
+  await expect(page.getByText("過去の投稿は承認した時点の新しい2件が入ります")).toHaveCount(0);   // 自動で選ぶのはやめた（REQ-007 BR-007-04）
   await expect(page.locator('[data-mark="replacement"]')).toHaveCount(1);
   const caption = page.getByText("学割のお知らせ").first();
   await expect(caption).toContainText("学割のお知らせ");

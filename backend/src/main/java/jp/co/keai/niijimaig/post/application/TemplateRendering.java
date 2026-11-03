@@ -54,6 +54,7 @@ class TemplateRendering implements PreparationMethod {
 	public void prepare(Post post, Instant deadline) {
 		UUID revisionId = post.approvedRevisionId();
 		long approval = guarded("RECORD_UNAVAILABLE", () -> records.approvalEvent(post.id(), revisionId));
+		// 承認の記録の過去の投稿の表紙（REQ-007 より前の承認だけ）を渡す。最後のスライドに並べる画像は renderPlan（ClosingContent.fromApproval）が決める
 		List<PastPostCover> pastPosts = guarded("RECORD_UNAVAILABLE", () -> records.pastPosts(approval));
 		RenderPlan plan = post.revision().renderPlan(pastPosts)
 				.orElseThrow(() -> new IllegalStateException("画像化できない投稿の版です"));
@@ -100,7 +101,7 @@ class TemplateRendering implements PreparationMethod {
 		data.put("slide", slide.values());
 		data.put("settings", plan.settings());
 		// このスライドが使う画像だけを渡す（全スライドぶんを毎回渡さない）
-		data.put("images", new RenderImages(storage, tenantId).dataUrls(slide.imageRefs()));
+		data.put("images", new RenderImages(storage, tenantId).dataUrls(slide.imageNeeds()));
 		byte[] jpeg = renderer.render(plan.templateVersion(), data);
 		PostMedia rendered = RenderedJpegs.checked(target.position(), target.renderPath(), jpeg);
 		String path = OwnedStoragePath.require(tenantId, rendered.storagePath());

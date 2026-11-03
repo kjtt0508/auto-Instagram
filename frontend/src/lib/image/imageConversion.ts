@@ -1,3 +1,4 @@
+import { ClosingImage } from "@/domain/post/ClosingImage";
 import { ImageSpec } from "@/domain/post/ImageSpec";
 
 // ブラウザ内の画像変換（REQ-001 設計 3.1）。比率とトリミング位置の計算は ImageSpec が決め、ここは canvas で描くだけ
@@ -41,11 +42,35 @@ export async function convertLogo(file: Blob): Promise<Blob> {
   return blob;
 }
 
-async function decode(file: Blob): Promise<ImageBitmap> {
+const CLOSING_IMAGE_QUALITY = 0.9;
+
+/**
+ * 最後のスライドの画像を JPEG にする（REQ-007 BR-007-02）。PNG・JPEG 以外と、切り抜いたあとが 400×500px より小さい画像は例外（理由は画面に出す）。
+ * 中央を 4:5 に切り抜き、800×1000px より大きければ縮小する（範囲は ClosingImage.planUpload が決める）。EXIF の向きを直し、透明は白で塗る
+ */
+export async function convertClosingImage(file: Blob): Promise<Blob> {
+  if (!ClosingImage.acceptsType(file.type)) throw new Error(ClosingImage.WRONG_TYPE);
+  const bitmap = await decode(file, "画像を読み込めませんでした。PNG か JPEG を選び直してください");
+  const plan = ClosingImage.planUpload({ width: bitmap.width, height: bitmap.height });
+  if (plan.violation) throw new Error(plan.violation);
+  const canvas = document.createElement("canvas");
+  canvas.width = plan.output.width;
+  canvas.height = plan.output.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("この端末では画像を変換できません");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, plan.crop.x, plan.crop.y, plan.crop.width, plan.crop.height, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", CLOSING_IMAGE_QUALITY));
+  if (!blob) throw new Error("画像を JPEG にできませんでした。別の画像を選んでください");
+  return blob;
+}
+
+async function decode(file: Blob, failure = "この画像は読み込めません。JPEG で選び直してください"): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
-    throw new Error("この画像は読み込めません。JPEG で選び直してください");
+    throw new Error(failure);
   }
 }
 

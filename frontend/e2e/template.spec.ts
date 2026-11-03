@@ -163,3 +163,52 @@ test("NFR-002-04 chromium と webkit で同じデータを描いた文字の位�
     });
   });
 });
+
+/** 最後のスライドに描かれた画像の矩形（左から並べた順） */
+const coverRects = (page: Page) => page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("#closing-covers img")).map((img) => {
+  const r = img.getBoundingClientRect();
+  return { x: r.x, y: r.y, w: r.width, h: r.height };
+}));
+
+// 画像の欄は枠 400×500・間隔 40px で、2枚なら 120〜520 と 560〜960、1枚なら真ん中の 340〜740、0枚なら無い（REQ-007 BR-007-03）
+const COVER_LAYOUT: Record<number, number[]> = { 0: [], 1: [340], 2: [120, 560] };
+
+test("NFR-007-01 最後のスライドの画像 0枚・1枚・2枚のそれぞれで、chromium と webkit の描き（文字の位置・画像の位置）が許容差の中で一致し、画像の欄以外の位置は枚数に左右されない", async () => {
+  test.setTimeout(180_000);
+  const TOLERANCE = 48; // NFR-002-04 と同じ許容差
+  const results: Record<string, { boxes: Box[]; covers: { x: number; y: number; w: number; h: number }[] }[]> = {};
+  for (const [name, type] of BROWSERS) {
+    const { browser, page } = await openPage(type);
+    try {
+      results[name] = [];
+      for (const count of [0, 1, 2]) {
+        await render(page, closing({ pastPosts: ["past1", "past2"].slice(0, count) }));
+        results[name].push({ boxes: await measure(page), covers: await coverRects(page) });
+      }
+    } finally {
+      await browser.close();
+    }
+  }
+  for (const [name] of BROWSERS) {
+    results[name].forEach((r, count) => {
+      expect(r.covers.map((c) => Math.round(c.x)), `${name} ${count}枚 画像の左端`).toEqual(COVER_LAYOUT[count]);
+      for (const c of r.covers) expect([Math.round(c.w), Math.round(c.h)], `${name} ${count}枚 画像の大きさ`).toEqual([400, 500]);
+      // 定型文・区切り・アカウントの紹介の位置は、画像の枚数に左右されない
+      expect(r.boxes.map((b) => [b.id, b.text.x, b.text.y]), `${name} ${count}枚 文字の位置`)
+        .toEqual(results[name][0].boxes.map((b) => [b.id, b.text.x, b.text.y]));
+    });
+  }
+  results.chromium.forEach((r, count) => {
+    const w = results.webkit[count];
+    expect(w.boxes.map((b) => b.id)).toEqual(r.boxes.map((b) => b.id));
+    r.boxes.forEach((b, j) => {
+      expect(Math.abs(b.text.x - w.boxes[j].text.x), `${count}枚 ${b.id} x`).toBeLessThanOrEqual(TOLERANCE);
+      expect(Math.abs(b.text.y - w.boxes[j].text.y), `${count}枚 ${b.id} y`).toBeLessThanOrEqual(TOLERANCE);
+    });
+    expect(w.covers).toHaveLength(r.covers.length);
+    r.covers.forEach((c, j) => {
+      expect(Math.abs(c.x - w.covers[j].x), `${count}枚 画像${j + 1} x`).toBeLessThanOrEqual(TOLERANCE);
+      expect(Math.abs(c.y - w.covers[j].y), `${count}枚 画像${j + 1} y`).toBeLessThanOrEqual(TOLERANCE);
+    });
+  });
+});

@@ -90,23 +90,23 @@ class SlideFixtureTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-15 BR-002-15 過去の投稿の表紙は2件まで。投稿自身の表紙は載せられない")
-	void pastPostCovers() {
-		var own = UUID.randomUUID();
-		assertThatThrownBy(() -> PastPostCover.of(own, "t/a.jpg", own)).hasMessageContaining("投稿自身");
+	@DisplayName("AC-007-09 AC-002-15 BR-007-05 REQ-007 より前の承認の過去の投稿の表紙は記録から戻すだけ。最後のスライドに並べるのは2枚まで")
+	void pastPostCoversAreOnlyRestored() {
 		List<PastPostCover> three = List.of(PastPostCover.restore(UUID.randomUUID(), "t/a.jpg"),
 				PastPostCover.restore(UUID.randomUUID(), "t/b.jpg"), PastPostCover.restore(UUID.randomUUID(), "t/c.jpg"));
-		assertThatThrownBy(() -> new ClosingContent(three)).hasMessageContaining("2件まで");
+		assertThatThrownBy(() -> ClosingContent.fromApproval(three, ClosingImageList.empty())).hasMessageContaining("2件まで");
+		assertThatThrownBy(() -> PastPostCover.restore(null, "t/a.jpg")).isInstanceOf(IllegalArgumentException.class);
+		assertThat(ClosingContent.MAX_IMAGES).isEqualTo(2);
 	}
 
 	@Test
-	@DisplayName("AC-002-02 画像化に渡す値と画像の参照: 背景写真・素材画像・承認で選んだ過去の投稿の表紙の保存先が上から順に並ぶ")
+	@DisplayName("AC-002-02 AC-007-05 画像化に渡す値と画像の参照: 背景写真・素材画像・最後のスライドの画像の保存先が上から順に並ぶ")
 	void renderValuesAndImageRefs() {
 		SlideList slides = SlideSamples.slides(List.of(SlideSamples.body(Optional.of(SlideSamples.material(ImageStyle.ILLUSTRATION)))));
 		assertThat(slides.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg");
 
-		SlideList withPast = slides.withPastPosts(List.of(PastPostCover.restore(UUID.randomUUID(), "t/posts/p2/1.jpg")));
-		assertThat(withPast.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg", "t/posts/p2/1.jpg");
+		SlideList withPast = slides.withClosing(ClosingContent.fromClosingImages(SlideSamples.closingImages("t/style/c1.jpg")));
+		assertThat(withPast.imageRefs()).containsExactly("t/backgrounds/1.jpg", "t/materials/1.jpg", "t/style/c1.jpg");
 		assertThat(withPast.renderValues()).hasSize(3);
 		assertThat(withPast.renderValues().get(0)).containsEntry("role", "COVER").containsEntry("keyword", "期末試験")
 				.containsEntry("accentStart", "#8C52FE").containsEntry("background", "t/backgrounds/1.jpg");
@@ -125,21 +125,21 @@ class SlideFixtureTest {
 					s.has("material") ? Optional.of(new MaterialImage(s.get("material").asString(), 800, 600, 120_000L, Optional.empty())) : Optional.empty()));
 			default -> {
 				List<PastPostCover> covers = new ArrayList<>();
-				s.get("pastPosts").forEach(p -> covers.add(PastPostCover.restore(UUID.randomUUID(), p.asString())));
-				yield new Slide(new ClosingContent(covers));
+				s.get("approvalPastPosts").forEach(p -> covers.add(PastPostCover.restore(UUID.randomUUID(), p.asString())));
+				yield new Slide(ClosingContent.fromApproval(covers, SlideSamples.closingImages(strings(s.get("closingImages")).toArray(String[]::new))));
 			}
 		};
 	}
 
 	@ParameterizedTest(name = "{0}")
 	@MethodSource("renderValuesCases")
-	@DisplayName("AC-002-02 テンプレートに渡す描画値は画面（TS）と同じ JSON になる（render-values.json）")
+	@DisplayName("AC-002-02 AC-007-05 AC-007-09 テンプレートに渡す描画値は画面（TS）と同じ JSON になる（render-values.json。最後のスライドは fromApproval）")
 	void renderValuesAreSharedWithScreen(JsonNode c) {
 		JsonNode input = c.get("settings");
 		PostStyleSettings base = SlideSamples.settings();
 		PostStyleSettings settings = new PostStyleSettings(UUID.randomUUID(), 1, input.get("bandText").asString(), List.of("同志社大学"),
 				input.get("closingMessage").asString(), input.get("accountIntroduction").asString(), base.captionFooter(), base.fixedHashtags(),
-				input.has("logo") ? Optional.of(input.get("logo").asString()) : Optional.empty());
+				input.has("logo") ? Optional.of(input.get("logo").asString()) : Optional.empty(), ClosingImageList.empty());
 		List<Slide> slides = new ArrayList<>();
 		c.get("slides").forEach(s -> slides.add(slideOf(s)));
 		JsonMapper mapper = JsonMapper.builder().build();

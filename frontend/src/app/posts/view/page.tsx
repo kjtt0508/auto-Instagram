@@ -9,9 +9,10 @@ import { SlidePreview } from "@/components/post/SlidePreview";
 import { StatusBadge } from "@/components/post/StatusBadge";
 import { useSession } from "@/components/session/SessionGate";
 import { Cell, GroupedSection, LargeTitle, Placeholder, ValueCell } from "@/components/ui/Grouped";
-import { PastPostCover } from "@/domain/post/PastPostCover";
 import type { Post } from "@/domain/post/Post";
 import type { PostEvent } from "@/domain/post/PostEvent";
+import type { SlideList } from "@/domain/slide/SlideList";
+import { slidesForView } from "@/lib/api/closingSlides";
 import { findPost, postHistory } from "@/lib/api/postRepository";
 
 /** S-04 投稿詳細（/posts/view/?id=…。静的出力のため動的ルートは使わない。ADR-0002） */
@@ -27,10 +28,12 @@ export default function PostViewPage() {
 function PostView() {
   const id = useSearchParams().get("id") ?? "";
   const { member, tenant } = useSession();
-  const [loaded, setLoaded] = useState<{ post: Post | null; history: PostEvent[] } | null>(null);
+  const [loaded, setLoaded] = useState<{ post: Post | null; history: PostEvent[]; slides: SlideList | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
-    Promise.all([findPost(id), postHistory(id)]).then(([post, history]) => setLoaded({ post, history }), (e: Error) => setError(e.message));
+    Promise.all([findPost(id), postHistory(id)])
+      .then(async ([post, history]) => setLoaded({ post, history, slides: post ? await slidesForView(post) : null }))
+      .catch((e: Error) => setError(e.message));
   }, [id]);
   useEffect(load, [load]);
 
@@ -40,9 +43,8 @@ function PostView() {
   const post = loaded.post;
   return (
     <article>
-      {post.content.template
-        ? <SlidePreview slides={post.content.template.slides} settings={post.content.template.settings}
-            templateVersion={post.content.template.templateVersion} closingNote={`過去の投稿は承認した時点の新しい${PastPostCover.MAX_COUNT}件が入ります`} />
+      {post.content.template && loaded.slides
+        ? <SlidePreview slides={loaded.slides} settings={post.content.template.settings} templateVersion={post.content.template.templateVersion} />
         : <MediaPreview media={post.content.media} />}
       <StatusSection post={post} />
       <GroupedSection title="キャプション（公開される文面）">
@@ -57,7 +59,7 @@ function PostView() {
 function StatusSection({ post }: { post: Post }) {
   const { scheduledAt, failure } = post.outcome;
   return (
-    <GroupedSection title="状態" footer={failure && <span className="text-destructive">{failure.message}<br />{failure.guidance()}</span>}>
+    <GroupedSection title="状態" footer={failure && <span className="text-destructive">{failure.message}{failure.guidanceToShow() && <><br />{failure.guidanceToShow()}</>}</span>}>
       <ValueCell label="状態"><StatusBadge status={post.status} /></ValueCell>
       <ValueCell label="種別">{post.content.format.label}・{post.content.prCategory.label}</ValueCell>
       {scheduledAt && <ValueCell label="予約日時">{formatDateTime(scheduledAt.toDate())}</ValueCell>}

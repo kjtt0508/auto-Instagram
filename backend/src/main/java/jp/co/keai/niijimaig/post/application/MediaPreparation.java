@@ -63,7 +63,7 @@ public class MediaPreparation {
 			methods.get(post.preparation()).prepare(post, deadline);
 			succeed(claimed);
 		} catch (RenderFailedException e) {
-			failNow(claimed, post, e.getMessage());
+			failNow(claimed, post, e.getMessage(), e.fixableByRerun());
 		} catch (RenderTemporaryFailureException e) {
 			retryLater(claimed, post, e);
 		}
@@ -73,8 +73,8 @@ public class MediaPreparation {
 		jobs.finish(claimed, claimed.job().succeeded(), AttemptOutcome.success(0), clock.instant());
 	}
 
-	private void failNow(ClaimedJob claimed, Post post, String detail) {
-		FailureReason reason = new FailureReason(FailureKind.RENDER_FAILED, FailureKind.RENDER_FAILED.guidance() + "（" + detail + "）");
+	private void failNow(ClaimedJob claimed, Post post, String detail, boolean fixableByRerun) {
+		FailureReason reason = FailureReason.renderFailed(detail, fixableByRerun);
 		post.failedPreparing(reason).ifPresent(event -> posts.recordFailure(post, event, reason));
 		jobs.finish(claimed, claimed.job().failedFinally(), AttemptOutcome.error(FailureKind.RENDER_FAILED.name(), detail, 0),
 				clock.instant());
@@ -88,7 +88,7 @@ public class MediaPreparation {
 	private void retryLater(ClaimedJob claimed, Post post, RenderTemporaryFailureException e) {
 		Job next = e.deferrable() ? claimed.job().deferred() : claimed.job().failedOrRetry();
 		if (next.isFinallyFailed()) {
-			failNow(claimed, post, "画像化の準備を完了できませんでした（" + e.code() + "）");
+			failNow(claimed, post, "画像化の準備を完了できませんでした（" + e.code() + "）", true);
 			return;
 		}
 		jobs.finish(claimed, next, AttemptOutcome.error(e.code(), e.getMessage(), 0), clock.instant().plus(RETRY_AFTER));

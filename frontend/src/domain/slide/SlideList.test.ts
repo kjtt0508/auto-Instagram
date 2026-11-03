@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixture from "../../../../docs/model/fixtures/slide-list.json";
 import renderValues from "../../../../docs/model/fixtures/render-values.json";
 import { sampleBody, sampleCoverText, sampleMaterial, sampleSettings, sampleSlides } from "../__tests__/samples";
+import { ClosingImageList } from "../post/ClosingImageList";
 import { PastPostCover } from "../post/PastPostCover";
 import { PostStyleSettings } from "../post/PostStyleSettings";
 import { BodyContent } from "./BodyContent";
@@ -50,12 +51,30 @@ describe("スライド構成の操作", () => {
     expect(() => sampleSlides().withSlideReplaced(1, Slide.createClosing(ClosingContent.empty()))).toThrow("同じ役割");
   });
 
-  it("画像化に必要な画像の参照は、背景写真・素材画像・（渡された）過去の投稿の表紙", () => {
+  it("AC-007-05 画像化に必要な画像の参照は、背景写真・素材画像・（渡された）最後のスライドの画像", () => {
     const slides = sampleSlides([sampleBody(sampleMaterial("ILLUSTRATION")), sampleBody()]);
     expect(slides.imageRefs()).toEqual(["t/backgrounds/1.jpg", "t/materials/1.jpg"]);
-    const covers = [PastPostCover.of("p2", "t/posts/p2/1.jpg", "p1"), PastPostCover.of("p3", "t/posts/p3/1.jpg", "p1")];
-    expect(slides.withPastPosts(covers).imageRefs()).toEqual(
-      ["t/backgrounds/1.jpg", "t/materials/1.jpg", "t/posts/p2/1.jpg", "t/posts/p3/1.jpg"]);
+    const closing = ClosingContent.fromClosingImages(ClosingImageList.restore(["t/style/a.jpg", "t/style/b.jpg"]));
+    expect(slides.withClosing(closing).imageRefs()).toEqual(
+      ["t/backgrounds/1.jpg", "t/materials/1.jpg", "t/style/a.jpg", "t/style/b.jpg"]);
+  });
+
+  it("AC-007-05 AC-007-07 withClosingImagesOf は渡した設定の版の画像を最後のスライドに入れる（0・1・2枚。元の構成は変えない）", () => {
+    const slides = sampleSlides([sampleBody()]);
+    const closingRefs = (s: SlideList) => s.items().at(-1)!.imageRefs();
+    expect(closingRefs(slides.withClosingImagesOf(sampleSettings()))).toEqual([]);
+    expect(closingRefs(slides.withClosingImagesOf(sampleSettings(["t1/style/a.jpg"])))).toEqual(["t1/style/a.jpg"]);
+    expect(closingRefs(slides.withClosingImagesOf(sampleSettings(["t1/style/a.jpg", "t1/style/b.jpg"]))))
+      .toEqual(["t1/style/a.jpg", "t1/style/b.jpg"]);
+    expect(closingRefs(slides)).toEqual([]);
+    expect(slides.withClosingImagesOf(sampleSettings(["t1/style/a.jpg"])).count()).toBe(slides.count());
+  });
+
+  it("AC-007-06 設定の画像を差し替えた版を渡すと、最後のスライドの画像はその版のものになる（承認前は記録した版、編集は最新の版）", () => {
+    const slides = sampleSlides([sampleBody()]);
+    const closingRefs = (settings: PostStyleSettings) => slides.withClosingImagesOf(settings).items().at(-1)!.imageRefs();
+    expect(closingRefs(sampleSettings(["t1/style/A.jpg"], 1))).toEqual(["t1/style/A.jpg"]);
+    expect(closingRefs(sampleSettings(["t1/style/B.jpg"], 2))).toEqual(["t1/style/B.jpg"]);
   });
 
   it("背景写真が無ければ参照は無い（紺の単色）", () => {
@@ -127,7 +146,9 @@ describe("テンプレートに渡す描画値（fixtures/render-values.json。J
         material: s.material ? MaterialImage.of({ storagePath: s.material as string, width: 800, height: 600, byteSize: 120_000 }) : undefined,
       }));
     }
-    return Slide.createClosing(ClosingContent.of((s.pastPosts as string[]).map((p, i) => PastPostCover.of(`p${i}`, p, "own"))));
+    // 最後のスライドの入力: 承認の記録の過去の投稿の表紙（approvalPastPosts）と設定の版の画像（closingImages）。どちらもキー必須（REQ-007）
+    const pastPosts = (s.approvalPastPosts as string[]).map((p, i) => PastPostCover.restore(`p${i}`, p));
+    return Slide.createClosing(ClosingContent.fromApproval(pastPosts, ClosingImageList.restore(s.closingImages as string[])));
   };
 
   it.each(renderValues.cases)("$id $name", (c) => {
@@ -144,11 +165,6 @@ describe("テンプレートに渡す描画値（fixtures/render-values.json。J
 
 describe("スライド構成の操作（続き）", () => {
   it("BR-002-11 画面が表示する枚数の上限・下限は定数から作る", () => {
-    expect([SlideList.BODY_MIN, SlideList.BODY_MAX, PastPostCover.MAX_COUNT]).toEqual([1, 8, 2]);
-  });
-
-  it("BR-002-15 過去の投稿の表紙は3件以上渡せない", () => {
-    const three = ["a", "b", "c"].map((id) => PastPostCover.of(id, `t/${id}.jpg`, "p1"));
-    expect(() => ClosingContent.of(three)).toThrow("2件まで");
+    expect([SlideList.BODY_MIN, SlideList.BODY_MAX, ClosingContent.MAX_IMAGES]).toEqual([1, 8, 2]);
   });
 });

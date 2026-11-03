@@ -12,8 +12,16 @@ export class FailureReason {
     return new FailureReason(FailureKind.from(kindCode), message);
   }
 
-  /** 画面に出す対処方法 */
+  /** 失敗区分の対処方法 */
   guidance(): string {
     return this.kind.guidance;
+  }
+
+  /**
+   * 説明のあとに画面が足して出す対処方法。説明がすでに対処方法を含む（または付けない）失敗区分は null
+   * （画像化の失敗。同じ案内を2回出さない・再実行で直らない失敗に「再実行でやり直せます」を出さない。REQ-007 BR-007-06）
+   */
+  guidanceToShow(): string | null {
+    return this.kind.describesOwnGuidance() ? null : this.kind.guidance;
   }
 }

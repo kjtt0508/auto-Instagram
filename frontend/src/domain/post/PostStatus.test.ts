@@ -19,6 +19,11 @@ describe("投稿状態の遷移（fixtures/post-status.json）", () => {
     expect(new Set(colors).size).toBe(3);
   });
 
+  it("AC-007-09 最後のスライドを承認の記録で描くのは、予約中・公開処理中・公開済み・失敗だけ（下書き・承認待ち・破棄は描かない）", () => {
+    const drawn = Object.fromEntries(PostStatus.all().map((s) => [s.code, s.drawsFromApproval()]));
+    expect(drawn).toEqual({ DRAFT: false, AWAITING_APPROVAL: false, SCHEDULED: true, PUBLISHING: true, PUBLISHED: true, FAILED: true, DISCARDED: false });
+  });
+
   it("知らない状態は復元できない", () => {
     expect(() => PostStatus.from("UNKNOWN")).toThrow();
   });

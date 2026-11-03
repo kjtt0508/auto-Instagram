@@ -26,7 +26,13 @@ final class SlideSamples {
 		List<String> tags = new ArrayList<>();
 		template.get("fixedHashtags").forEach(n -> tags.add(n.asString()));
 		return new PostStyleSettings(UUID.randomUUID(), 1, "テスト帯", List.of("同志社大学", "同志社大生"), "ありがとうございます",
-				"@test_account", new CaptionFooter(template.get("captionFooter").asString()), new FixedHashtags(tags), Optional.empty());
+				"@test_account", new CaptionFooter(template.get("captionFooter").asString()), new FixedHashtags(tags), Optional.empty(),
+				ClosingImageList.empty());
+	}
+
+	/** 最後のスライドの画像（保存先）が入った一覧 */
+	static ClosingImageList closingImages(String... paths) {
+		return ClosingImageList.restore(java.util.Arrays.stream(paths).map(ClosingImage::restore).toList());
 	}
 
 	static CoverText coverText() {

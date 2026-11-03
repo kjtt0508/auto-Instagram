@@ -27,6 +27,7 @@ import jp.co.keai.niijimaig.post.domain.BodyContent;
 import jp.co.keai.niijimaig.post.domain.Caption;
 import jp.co.keai.niijimaig.post.domain.CaptionFooter;
 import jp.co.keai.niijimaig.post.domain.ClosingContent;
+import jp.co.keai.niijimaig.post.domain.ClosingImageList;
 import jp.co.keai.niijimaig.post.domain.CoverContent;
 import jp.co.keai.niijimaig.post.domain.CoverText;
 import jp.co.keai.niijimaig.post.domain.FixedHashtags;
@@ -59,7 +60,8 @@ class PlaywrightTemplateRendererTest {
 	/** 画像の無い表紙・中のスライド・最後のスライドの計画 */
 	private static RenderPlan plan(String keyword, String heading) {
 		PostStyleSettings settings = new PostStyleSettings(UUID.randomUUID(), 1, "新島info", List.of("同志社大学"), "ありがとうございます",
-				"@niijima_info", new CaptionFooter("定型の文面"), new FixedHashtags(List.of("#固定")), Optional.empty());
+				"@niijima_info", new CaptionFooter("定型の文面"), new FixedHashtags(List.of("#固定")), Optional.empty(),
+				ClosingImageList.empty());
 		List<Slide> slides = new ArrayList<>();
 		slides.add(new Slide(new CoverContent(CoverText.restore(new CoverText.Parts("同志社大学", keyword, "", "まとめたよ", "RED")), Optional.empty())));
 		slides.add(new Slide(new BodyContent(SlideText.restore(heading, "学生証を見せるだけで割引になります", List.of("学生証")), Optional.empty())));

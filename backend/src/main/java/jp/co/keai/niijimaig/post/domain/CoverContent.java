@@ -29,8 +29,8 @@ public record CoverContent(CoverText text, Optional<Background> background) impl
 	}
 
 	@Override
-	public List<String> imageRefs() {
-		return background.map(b -> List.of(b.storagePath())).orElse(List.of());
+	public List<RenderImageNeed> imageNeeds() {
+		return background.map(b -> List.of(RenderImageNeed.of(b.storagePath()))).orElse(List.of());
 	}
 
 	@Override

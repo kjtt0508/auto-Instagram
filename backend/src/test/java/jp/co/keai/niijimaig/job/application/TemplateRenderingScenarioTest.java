@@ -12,6 +12,7 @@ import java.io.UncheckedIOException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import javax.imageio.ImageIO;
@@ -171,12 +172,11 @@ class TemplateRenderingScenarioTest {
 	}
 
 	@Test
-	@DisplayName("AC-002-15 下書きに戻して再承認すると、新しい承認の出来事の画像を作り直し、最後のスライドに選び直した過去の投稿を載せる")
+	@DisplayName("AC-002-02 AC-007-08 下書きに戻して再承認すると、新しい承認の出来事の画像を作り直す。公開済みの投稿があっても、最後のスライドに過去の投稿は載らない（承認の記録にも残らない）")
 	void reapprovalRendersAgain() {
 		UUID post = approvedPost(Instant.now().plus(Duration.ofDays(1)), template(background(), body("学割が使える", material(null))));
 		tick.run("render-6a");
 		long first = latestApproval(post);
-		byte[] firstClosing = storage.objects.get(tenant + "/renders/" + first + "/3.jpg");
 		publishedUploadPost();
 
 		db.as(approver, j -> j.queryForList("select public.cancel_schedule(?)", post));
@@ -185,10 +185,220 @@ class TemplateRenderingScenarioTest {
 
 		long second = latestApproval(post);
 		assertThat(second).isGreaterThan(first);
-		assertThat(jdbc.queryForObject("select count(*) from approval_past_posts where approval_event_id = ?", Integer.class, second)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("select count(*) from approval_past_posts where approval_event_id = ?", Integer.class, second)).isZero();
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, second)).isEqualTo(3);
 		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, first)).isEqualTo(3);
-		assertThat(storage.objects.get(tenant + "/renders/" + second + "/3.jpg")).isNotEqualTo(firstClosing);
+		assertThat(coverRowColors(second)).as("最後のスライドの画像の欄は空のまま").allMatch(this::isPlainBackground);
+	}
+
+	// ───────── 最後のスライドの画像（REQ-007） ─────────
+
+	/** 画像化した最後のスライド（3枚目）で、画像の枠の中心の色。2枚なら左 (320, 608)・右 (760, 608)、1枚なら真ん中 (540, 608) */
+	private static final int[][] FRAME_CENTERS = { { 320, 608 }, { 540, 608 }, { 760, 608 } };
+
+	private static final Color RED = new Color(200, 30, 30);
+	private static final Color BLUE = new Color(30, 30, 200);
+	private static final Color GREEN = new Color(30, 170, 60);
+
+	private List<Color> coverRowColors(long approval) {
+		BufferedImage image = decode(storage.objects.get(tenant + "/renders/" + approval + "/3.jpg"));
+		return java.util.Arrays.stream(FRAME_CENTERS).map(p -> new Color(image.getRGB(p[0], p[1]))).toList();
+	}
+
+	private static boolean isNear(Color actual, Color expected) {
+		return Math.abs(actual.getRed() - expected.getRed()) < 60 && Math.abs(actual.getGreen() - expected.getGreen()) < 60
+				&& Math.abs(actual.getBlue() - expected.getBlue()) < 60;
+	}
+
+	/** 画像の枠の中心が、画像の色（赤・青・緑）のどれでもない（背景のまま） */
+	private boolean isPlainBackground(Color color) {
+		return !isNear(color, RED) && !isNear(color, BLUE) && !isNear(color, GREEN);
+	}
+
+	private String putClosingImage(Color color) {
+		String path = tenant + "/style/" + UUID.randomUUID() + ".jpg";
+		storage.objects.put(path, jpeg(800, 1000, color));
+		return path;
+	}
+
+	private void saveStyleWithClosingImages(String... paths) {
+		String literal = java.util.Arrays.stream(paths).map(p -> "\"" + p + "\"").collect(java.util.stream.Collectors.joining(",", "{", "}"));
+		db.as(admin, j -> j.queryForObject("select public.save_post_style_settings('同志社生向けSNSメディア', '{同志社大学}'::text[], "
+				+ "'ご覧いただきありがとうございます', '@niijima_info', '---\nフッター', '{#固定}'::text[], null, ?::text[])", Integer.class, literal));
+	}
+
+	@Test
+	@DisplayName("AC-007-05 設定の最後のスライドの画像が2枚なら、画像化した最後のスライドの左に1枚目・右に2枚目が並ぶ（承認の記録は空）")
+	void twoClosingImagesAreRenderedLeftAndRight() {
+		saveStyleWithClosingImages(putClosingImage(RED), putClosingImage(BLUE));
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+
+		tick.run("closing-2");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		List<Color> colors = coverRowColors(latestApproval(post));
+		assertThat(isNear(colors.get(0), RED)).as("左: " + colors.get(0)).isTrue();
+		assertThat(isNear(colors.get(2), BLUE)).as("右: " + colors.get(2)).isTrue();
+		assertThat(isPlainBackground(colors.get(1))).as("真ん中は2枚の間の隙間: " + colors.get(1)).isTrue();
+	}
+
+	@Test
+	@DisplayName("AC-007-05 設定の最後のスライドの画像が1枚なら真ん中に1枚、0枚なら画像の欄なし。どちらも定型文などの位置は変わらない")
+	void oneAndZeroClosingImages() {
+		saveStyleWithClosingImages(putClosingImage(RED));
+		UUID one = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+		saveStyleWithClosingImages();
+		UUID none = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+
+		tick.run("closing-1-0");
+
+		List<Color> oneColors = coverRowColors(latestApproval(one));
+		assertThat(isNear(oneColors.get(1), RED)).as("真ん中: " + oneColors.get(1)).isTrue();
+		assertThat(isPlainBackground(oneColors.get(0))).isTrue();
+		assertThat(isPlainBackground(oneColors.get(2))).isTrue();
+		assertThat(coverRowColors(latestApproval(none))).allMatch(this::isPlainBackground);
+	}
+
+	@Test
+	@DisplayName("AC-007-06 設定の画像をあとで変えても、すでに保存した下書きを承認して画像化すると保存した時点の画像のまま")
+	void laterSettingsChangeDoesNotChangeASavedDraft() {
+		saveStyleWithClosingImages(putClosingImage(RED));
+		UUID saved = db.as(editor, j -> j.queryForObject("select post_id from public.save_post_revision(null, ?::jsonb)", UUID.class,
+				template(background(), body("学割が使える", material(null)))));
+		saveStyleWithClosingImages(putClosingImage(BLUE));
+
+		requestAndApprove(saved, Instant.now().minus(Duration.ofMinutes(5)));
+		tick.run("closing-keep");
+
+		List<Color> colors = coverRowColors(latestApproval(saved));
+		assertThat(isNear(colors.get(1), RED)).as("真ん中: " + colors.get(1)).isTrue();
+	}
+
+	@Test
+	@DisplayName("AC-007-09 AC-002-15 REQ-007 より前の承認が過去の投稿の表紙を記録していれば、設定の画像があっても記録した表紙を載せる（設定の画像に変えない）")
+	void legacyApprovalRecordWinsOverSettingsImages() {
+		saveStyleWithClosingImages(putClosingImage(RED), putClosingImage(BLUE));
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+		UUID past = publishedUploadPost();
+		String cover = tenant + "/posts/" + UUID.randomUUID() + ".jpg";
+		storage.objects.put(cover, jpeg(1080, 1350, GREEN));
+		jdbc.update("insert into approval_past_posts (approval_event_id, position, past_post_id, cover_storage_path) values (?, 1, ?, ?)",
+				latestApproval(post), past, cover);
+
+		tick.run("closing-legacy");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		List<Color> colors = coverRowColors(latestApproval(post));
+		assertThat(isNear(colors.get(1), GREEN)).as("真ん中は記録した表紙: " + colors.get(1)).isTrue();
+		assertThat(isPlainBackground(colors.get(0))).isTrue();
+		assertThat(isPlainBackground(colors.get(2))).isTrue();
+	}
+
+	/** REQ-007 より前の承認が記録していた過去の投稿の表紙（GREEN）を、承認の出来事に直接書く。表紙の画像は Storage に置く。戻り値は表紙の保存先 */
+	private String recordLegacyCover(UUID post) {
+		UUID past = publishedUploadPost();
+		String cover = tenant + "/posts/" + UUID.randomUUID() + ".jpg";
+		storage.objects.put(cover, jpeg(1080, 1350, GREEN));
+		jdbc.update("insert into approval_past_posts (approval_event_id, position, past_post_id, cover_storage_path) values (?, 1, ?, ?)",
+				latestApproval(post), past, cover);
+		return cover;
+	}
+
+	@Test
+	@DisplayName("AC-007-10 改修前の承認が過去の投稿の表紙を記録していても、下書きに戻して保存し直して再承認すると、新しい承認には記録がなく、保存した時点の設定の画像が載る")
+	void reapprovalAfterLegacyApprovalUsesSettingsImages() {
+		UUID post = approvedPost(Instant.now().plus(Duration.ofDays(1)), template(background(), body("学割が使える", material(null))));
+		long first = latestApproval(post);
+		recordLegacyCover(post);
+		saveStyleWithClosingImages(putClosingImage(RED));
+
+		db.as(approver, j -> j.queryForList("select public.cancel_schedule(?)", post));
+		reapprove(post, template(background(), body("学割が使える", material(null))));
+		tick.run("closing-reapprove");
+
+		long second = latestApproval(post);
+		assertThat(second).isGreaterThan(first);
+		assertThat(jdbc.queryForObject("select count(*) from approval_past_posts where approval_event_id = ?", Integer.class, first)).isEqualTo(1);
+		assertThat(jdbc.queryForObject("select count(*) from approval_past_posts where approval_event_id = ?", Integer.class, second)).isZero();
+		List<Color> colors = coverRowColors(second);
+		assertThat(isNear(colors.get(1), RED)).as("真ん中は設定の画像: " + colors.get(1)).isTrue();
+		assertThat(isNear(colors.get(1), GREEN)).as("過去の投稿の表紙は載らない").isFalse();
+		assertThat(isPlainBackground(colors.get(0))).isTrue();
+		assertThat(isPlainBackground(colors.get(2))).isTrue();
+	}
+
+	@Test
+	@DisplayName("AC-007-13 画像が見つからず失敗した投稿も、画像を設定し直し、下書きに戻して保存し直して承認すれば、画像化できる")
+	void failedByMissingClosingImageRecoversAfterSettingsAreFixedAndSavedAgain() {
+		saveStyleWithClosingImages(putClosingImage(RED), tenant + "/style/" + UUID.randomUUID() + ".jpg");
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+		tick.run("closing-recover-a");
+		assertThat(status(post)).isEqualTo("FAILED");
+
+		saveStyleWithClosingImages(putClosingImage(RED), putClosingImage(BLUE));
+		db.as(approver, j -> j.queryForList("select public.return_to_draft(?)", post));
+		reapprove(post, template(background(), body("学割が使える", material(null))));
+		tick.run("closing-recover-b");
+
+		assertThat(status(post)).isEqualTo("SCHEDULED");
+		long approval = latestApproval(post);
+		assertThat(jdbc.queryForObject("select count(*) from template_renders where approval_event_id = ?", Integer.class, approval)).isEqualTo(3);
+		assertThat(jdbc.queryForObject("select count(*) from template_publish_media where approval_event_id = ?", Integer.class, approval)).isEqualTo(3);
+		List<Color> colors = coverRowColors(approval);
+		assertThat(isNear(colors.get(0), RED)).isTrue();
+		assertThat(isNear(colors.get(2), BLUE)).isTrue();
+	}
+
+	@Test
+	@DisplayName("AC-007-09 AC-002-15 改修前の承認の表紙が見つからず失敗した投稿は、表紙が戻ってから「今すぐ再実行」すると、記録した表紙（設定の画像ではない）が載る")
+	void retryOfALegacyApprovalStillUsesTheRecordedCover() {
+		saveStyleWithClosingImages(putClosingImage(RED));
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+		String cover = recordLegacyCover(post);
+		byte[] coverBytes = storage.objects.remove(cover);
+
+		tick.run("closing-retry-a");
+
+		assertThat(status(post)).isEqualTo("FAILED");
+		assertThat(jdbc.queryForObject("select f.message from post_failures f join post_events e on e.id = f.event_id where e.post_id = ?", String.class, post))
+				.isEqualTo("画像化に失敗しました。今すぐ再実行でやり直せます（画像化に必要な画像が見つかりません）");
+
+		storage.objects.put(cover, coverBytes);
+		db.as(approver, j -> j.queryForList("select public.retry_post(?, ?)", post, Timestamp.from(Instant.now().plus(Duration.ofDays(1)))));
+		tick.run("closing-retry-b");
+
+		assertThat(status(post)).isEqualTo("SCHEDULED");
+		List<Color> colors = coverRowColors(latestApproval(post));
+		assertThat(isNear(colors.get(1), GREEN)).as("真ん中は記録した表紙: " + colors.get(1)).isTrue();
+		assertThat(isNear(colors.get(1), RED)).isFalse();
+	}
+
+	@Test
+	@DisplayName("AC-007-09 改修前の設定の版（最後のスライドの画像なし）で、承認の記録も0件なら、画像の欄なしで描く。公開済みの投稿があっても載せない")
+	void legacyApprovalWithoutRecordsDrawsNoImages() {
+		publishedUploadPost();
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+
+		tick.run("closing-legacy-0");
+
+		assertThat(status(post)).isEqualTo("PUBLISHED");
+		assertThat(coverRowColors(latestApproval(post))).allMatch(this::isPlainBackground);
+	}
+
+	@Test
+	@DisplayName("AC-007-13 最後のスライドの画像が Storage に見つからないと、画像化の失敗になり、最後のスライドの画像の理由が表示される。公開されない")
+	void missingClosingImageFailsWithItsReason() {
+		String missing = tenant + "/style/" + UUID.randomUUID() + ".jpg";
+		saveStyleWithClosingImages(putClosingImage(RED), missing);
+		UUID post = approvedPost(Instant.now().minus(Duration.ofMinutes(5)), template(background(), body("学割が使える", material(null))));
+
+		tick.run("closing-missing");
+
+		assertThat(status(post)).isEqualTo("FAILED");
+		assertThat(jdbc.queryForObject("select last_failure_kind from post_current where post_id = ?", String.class, post)).isEqualTo("RENDER_FAILED");
+		assertThat(jdbc.queryForObject("select f.message from post_failures f join post_events e on e.id = f.event_id where e.post_id = ?", String.class, post))
+				.isEqualTo("最後のスライドの画像が見つかりません。管理者が画像を設定し直したあと、下書きに戻して保存し直してください");
+		assertThat(instagram.publishCalls.get()).isZero();
 	}
 
 	@Test
@@ -305,8 +515,8 @@ class TemplateRenderingScenarioTest {
 		db.as(approver, j -> j.queryForList("select public.approve_post(?, ?, ?)", post, revision, Timestamp.from(scheduledAt)));
 	}
 
-	/** 公開済みのアップロードの投稿（最後のスライドに載せる過去の投稿になる） */
-	private void publishedUploadPost() {
+	/** 公開済みのアップロードの投稿（REQ-007 より前は最後のスライドに載せる過去の投稿になった。今は選ばれない）。戻り値は投稿ID */
+	private UUID publishedUploadPost() {
 		String path = tenant + "/posts/" + UUID.randomUUID() + ".jpg";
 		storage.objects.put(path, jpeg(1080, 1350, new Color(150, 60, 160)));
 		String revision = "{\"format\":\"FEED_IMAGE\",\"mediaSource\":\"UPLOAD\",\"caption\":\"過去\",\"prCategory\":\"NONE\",\"media\":[{\"position\":1,"
@@ -318,6 +528,7 @@ class TemplateRenderingScenarioTest {
 		jdbc.update("insert into post_events (post_id, event_type, from_status, to_status, revision_id) values (?, 'PUBLISHED', 'PUBLISHING', 'PUBLISHED', ?)", past, rev);
 		jdbc.update("insert into post_publications (post_id, ig_media_id, permalink, published_at) values (?, ?, ?, now())",
 				past, "ig-" + UUID.randomUUID(), "https://www.instagram.com/p/x/");
+		return past;
 	}
 
 	private void connectInstagram() {
